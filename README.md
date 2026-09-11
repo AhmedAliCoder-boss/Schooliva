@@ -16,7 +16,8 @@ Open http://localhost:3000.
 
 Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
 `.env.local` before using Supabase features. Never add service-role keys to
-frontend or `NEXT_PUBLIC_*` variables.
+frontend or `NEXT_PUBLIC_*` variables. Set `NEXT_PUBLIC_SITE_URL` to the
+deployed app URL when enabling password recovery in production.
 
 ## Useful commands
 
