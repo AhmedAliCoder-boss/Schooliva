@@ -15,6 +15,7 @@ export const config = {
     "/staff/:path*",
     "/parents/:path*",
     "/parent/:path*",
+    "/attendance/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
