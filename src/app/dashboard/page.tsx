@@ -17,6 +17,6 @@ export default async function DashboardPage() {
   return <main className="dashboard-shell"><header className="dashboard-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><form action={signOut}><button className="sign-out" type="submit">Sign out</button></form></header>
     <section className="dashboard-welcome"><p className="eyebrow">Your school workspace</p><h1>Good to see you, {profile?.full_name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "there"}.</h1><p>Schooliva foundation is ready for your school operations.</p></section>
     {membership && school ? <section className="workspace-summary"><span className="principle-number">CURRENT SCHOOL</span><h2>{school.name}</h2><p>{role?.name ?? "School member"}</p></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
-    <nav className="dashboard-links" aria-label="Account navigation"><Link href="/setup">School setup <span>-&gt;</span></Link><Link href="/profile">Manage your profile <span>-&gt;</span></Link></nav>
+    <nav className="dashboard-links" aria-label="Account navigation"><Link href="/students">Students <span>-&gt;</span></Link><Link href="/setup">School setup <span>-&gt;</span></Link><Link href="/profile">Manage your profile <span>-&gt;</span></Link></nav>
   </main>;
 }
