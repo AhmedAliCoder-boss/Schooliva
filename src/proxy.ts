@@ -17,6 +17,7 @@ export const config = {
     "/parent/:path*",
     "/attendance/:path*",
     "/timetable/:path*",
+    "/curriculum/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
