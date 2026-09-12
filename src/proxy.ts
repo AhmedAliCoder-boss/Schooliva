@@ -11,6 +11,8 @@ export const config = {
     "/dashboard/:path*",
     "/profile/:path*",
     "/students/:path*",
+    "/teachers/:path*",
+    "/staff/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
