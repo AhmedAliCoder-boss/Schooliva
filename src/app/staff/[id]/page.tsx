@@ -1,0 +1,6 @@
+import Link from "next/link";
+
+import { StaffForm } from "@/components/people/people-forms";
+import { requirePeopleContext } from "@/lib/people/context";
+
+export default async function StaffProfilePage({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; const { supabase, schoolId } = await requirePeopleContext("staff", "view"); const { data } = await supabase.from("staff").select("*").eq("id", id).eq("school_id", schoolId).maybeSingle(); if (!data) return <main className="student-profile-shell"><h1>Staff member not found.</h1></main>; return <main className="student-editor-shell"><header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/staff">All staff -&gt;</Link></header><section className="student-editor-heading"><p className="eyebrow">Staff profile</p><h1>{data.first_name} {data.last_name}.</h1><p>{data.employee_code} · {data.designation}</p></section><StaffForm staff={data as Record<string, string | null>} /></main>; }
