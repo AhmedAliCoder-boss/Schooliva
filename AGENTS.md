@@ -10,10 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 16 — Transport management
-- Transport module manages vehicles, capacity, drivers, routes, stops, student route assignments, and transport fees.
-- Vehicle capacity is enforced at the database layer to prevent assigning students beyond seat limits.
-- Route assignment includes pickup and drop-off stop tracking with school-scoped route mappings.
-- Transport reports and fleet status are protected behind auth and RBAC/RLS.
-- GPS integration is intentionally not implemented yet; architecture remains ready for future location-aware features.
-- Use real Supabase data; no hardcoded vehicles, route assignments, or transport fee data.
+- Current phase: Phase 17 — Inventory management
+- Inventory module tracks item categories, units, suppliers, stock items, current quantities, inventory history, and low-stock thresholds.
+- Stock movement is historical and append-only; no direct overwrite of current stock quantity is allowed.
+- Stock-in, stock-out, adjustment, and return transactions are recorded with supplier/cost/location context.
+- Low-stock alerts are surfaced from minimum stock level thresholds.
+- Inventory operations remain protected behind auth and RBAC/RLS.
+- Use real Supabase data; no hardcoded inventory records or mock stock movements.
