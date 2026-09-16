@@ -58,6 +58,14 @@ h1 { font-size: clamp(3.5rem, 7vw, 7.2rem); font-weight: 500; letter-spacing: -.
 .principles-grid h3 { font-size: 1.35rem; font-weight: 550; letter-spacing: -.04em; margin: 45px 0 12px; }
 .principles-grid p { color: var(--ink-soft); font-size: .9rem; line-height: 1.6; max-width: 270px; }
 .footer { border-top: 1px solid var(--line); color: var(--ink-soft); display: flex; font-size: .7rem; justify-content: space-between; padding: 22px 0 30px; }
+.notification-list { display: grid; gap: 12px; margin: 0 auto; max-width: 960px; }
+.notification-card { align-items: flex-start; background: white; border: 1px solid #e3ebf6; display: flex; gap: 20px; justify-content: space-between; padding: 22px; }
+.notification-card.unread { border-left: 4px solid #2563eb; background: #f8fbff; }
+.notification-card h2 { color: #0f172a; font-size: 1rem; margin: 8px 0; }
+.notification-card p { color: #64748b; font-size: .84rem; line-height: 1.5; margin: 0 0 8px; }
+.notification-card small, .notification-event { color: #94a3b8; font-size: .68rem; text-transform: capitalize; }
+.notification-read-button { background: transparent; border: 1px solid #bfdbfe; color: #2563eb; cursor: pointer; font: inherit; font-size: .72rem; padding: 8px 10px; white-space: nowrap; }
+.notification-read-state { color: #94a3b8; font-size: .72rem; }
 
 @media (max-width: 760px) {
   .site-shell { padding: 0 24px; }
