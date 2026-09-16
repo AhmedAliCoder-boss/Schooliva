@@ -10,8 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 22 — Audit logging
-- Audit logs are append-only and capture actor, school, action, entity, timestamp, and metadata.
-- Finance, marks, attendance, membership, and certificate changes are automatically audited by database triggers.
-- Only authorized administrators can view audit logs; normal users cannot update or delete them.
-- Audit records use real Supabase data and remain protected by RLS.
+- Current phase: Phase 23 — Search, reporting, and export
+- Global search is server-side and permission-scoped so only authorized records appear.
+- Search covers students, teachers, parents, classes, invoices, books, and assignments.
+- Reports are generated from database summary functions and allow filters for date ranges, classes, sections, and academic sessions.
+- Export-friendly layouts and print-ready reports are kept server-side and avoid loading whole tables into the browser.
