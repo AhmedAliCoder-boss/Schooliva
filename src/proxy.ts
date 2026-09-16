@@ -19,6 +19,7 @@ export const config = {
     "/timetable/:path*",
     "/curriculum/:path*",
     "/exams/:path*",
+    "/results/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
