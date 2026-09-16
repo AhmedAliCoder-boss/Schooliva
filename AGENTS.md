@@ -10,9 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 20 — Documents and certificates
-- Document metadata is stored in PostgreSQL while binaries remain in private Supabase Storage buckets.
-- Student, teacher, and school document access is protected with RLS and storage ownership rules.
-- Certificate records support character, bonafide, leaving, and enrollment certificate types.
-- Certificates have secure references, issue status, and print-friendly templates.
-- Use real Supabase document metadata; never store uploaded file binaries in relational tables.
+- Current phase: Phase 21 — Dashboard and analytics
+- Dashboards use the server-side `dashboard_summary` RPC for role-specific aggregate metrics.
+- Admin/principal, accountant, teacher, parent, and student dashboard metrics are scoped by membership and role.
+- Avoid pulling large operational tables into the browser for summary cards.
+- Use real Supabase aggregates; charts should only be added when they clarify a meaningful trend.
