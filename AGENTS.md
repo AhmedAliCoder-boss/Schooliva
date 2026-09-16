@@ -10,9 +10,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 18 — Leave management
-- Leave requests support students, teachers, and staff with leave types, dates, reasons, attachments, approvers, and workflow states.
-- Workflow states are requested -> approved/rejected -> completed.
-- Leave visibility is protected by requester, subject, approver, and school-scoped RLS rules.
-- Leave attachments use the private Supabase Storage bucket `leave-attachments`.
-- Leave dashboard summaries use real Supabase data; no hardcoded leave counts.
+- Current phase: Phase 19 — Notification system
+- Notifications are in-app, user-specific, read/unread, and protected by recipient RLS.
+- Supported event architecture includes absences, overdue fees, payments, assignments, exams, results, announcements, and leave changes.
+- Notification preferences can disable in-app events per user and event type.
+- Provider integrations for email, SMS, and push are intentionally deferred.
+- Use real Supabase notification data; no hardcoded alerts or fake event counts.
