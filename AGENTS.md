@@ -10,8 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 21 — Dashboard and analytics
-- Dashboards use the server-side `dashboard_summary` RPC for role-specific aggregate metrics.
-- Admin/principal, accountant, teacher, parent, and student dashboard metrics are scoped by membership and role.
-- Avoid pulling large operational tables into the browser for summary cards.
-- Use real Supabase aggregates; charts should only be added when they clarify a meaningful trend.
+- Current phase: Phase 22 — Audit logging
+- Audit logs are append-only and capture actor, school, action, entity, timestamp, and metadata.
+- Finance, marks, attendance, membership, and certificate changes are automatically audited by database triggers.
+- Only authorized administrators can view audit logs; normal users cannot update or delete them.
+- Audit records use real Supabase data and remain protected by RLS.

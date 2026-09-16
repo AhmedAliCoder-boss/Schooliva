@@ -1,0 +1,8 @@
+import Link from "next/link";
+import { requireAuditContext } from "@/lib/audit/context";
+
+export default async function AuditPage() {
+  const { supabase, schoolId } = await requireAuditContext();
+  const { data: logs } = await supabase.from("audit_logs").select("id,actor_id,action,entity_type,entity_id,metadata,created_at,profiles(full_name)").eq("school_id", schoolId).order("created_at", { ascending: false }).range(0, 99);
+  return <main className="students-shell"><header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header><section className="students-heading"><div><p className="eyebrow">Security / compliance</p><h1>Audit log.</h1><p>Append-only history of important school, academic, finance, and access actions.</p></div></section><div className="student-table-wrap"><table className="student-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Entity ID</th><th>Metadata</th></tr></thead><tbody>{(logs ?? []).length ? (logs ?? []).map((log) => { const profile = Array.isArray(log.profiles) ? log.profiles[0] : log.profiles; return <tr key={String(log.id)}><td>{new Date(String(log.created_at)).toLocaleString()}</td><td>{profile?.full_name ?? String(log.actor_id ?? "System")}</td><td><span className="status-pill active">{String(log.action)}</span></td><td>{String(log.entity_type)}</td><td>{String(log.entity_id ?? "-")}</td><td><small>{JSON.stringify(log.metadata)}</small></td></tr>; }) : <tr><td colSpan={6}><div className="student-empty"><h3>No audit events</h3><p>Important system actions will appear here.</p></div></td></tr>}</tbody></table></div></main>;
+}
