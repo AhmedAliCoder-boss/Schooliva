@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-labelledby="title desc">
+  <title id="title">Schooliva icon</title>
+  <desc id="desc">A green and lime monogram representing the Schooliva app.</desc>
+  <rect width="192" height="192" rx="42" fill="#1f5b4e"/>
+  <path d="M55 52h30l28 56 28-56h30v88h-24V84l-34 66h-12l-34-66v56H55V52Z" fill="#d6e85b"/>
+</svg>

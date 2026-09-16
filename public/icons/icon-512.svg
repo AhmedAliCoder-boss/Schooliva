@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Schooliva icon large</title>
+  <desc id="desc">Large Schooliva icon used for install prompts and splash screens.</desc>
+  <rect width="512" height="512" rx="114" fill="#1f5b4e"/>
+  <path d="M146 142h82l74 152 74-152h82v228h-65V266L310 420h-34L177 266v104h-31V142Z" fill="#d6e85b"/>
+</svg>

@@ -1,5 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import { RegisterPwa } from "@/components/pwa/register-pwa";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,15 +17,42 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Schooliva | School operations, clearly managed",
   description: "The foundation for a secure, modular school management system.",
+  applicationName: "Schooliva",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Schooliva",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
+      { url: "/icons/icon-512.svg", sizes: "512x512", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#1f5b4e",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <RegisterPwa />
+        {children}
+      </body>
     </html>
   );
 }
