@@ -10,9 +10,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 19 — Notification system
-- Notifications are in-app, user-specific, read/unread, and protected by recipient RLS.
-- Supported event architecture includes absences, overdue fees, payments, assignments, exams, results, announcements, and leave changes.
-- Notification preferences can disable in-app events per user and event type.
-- Provider integrations for email, SMS, and push are intentionally deferred.
-- Use real Supabase notification data; no hardcoded alerts or fake event counts.
+- Current phase: Phase 20 — Documents and certificates
+- Document metadata is stored in PostgreSQL while binaries remain in private Supabase Storage buckets.
+- Student, teacher, and school document access is protected with RLS and storage ownership rules.
+- Certificate records support character, bonafide, leaving, and enrollment certificate types.
+- Certificates have secure references, issue status, and print-friendly templates.
+- Use real Supabase document metadata; never store uploaded file binaries in relational tables.

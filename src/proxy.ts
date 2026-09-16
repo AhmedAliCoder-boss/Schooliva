@@ -27,6 +27,7 @@ export const config = {
     "/inventory/:path*",
     "/leave/:path*",
     "/notifications/:path*",
+    "/documents/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
