@@ -21,6 +21,7 @@ export const config = {
     "/exams/:path*",
     "/results/:path*",
     "/finance/:path*",
+    "/assignments/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",

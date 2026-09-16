@@ -10,10 +10,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 13 — Fees and finance
-- Fee structures are session/class scoped with numeric money values and due dates.
-- Invoices track subtotal, discount, late fee, total, paid, remaining, status, and due date.
-- Payments are recorded with references, method, date, received-by, and notes.
-- Financial records are never silently deleted; status-driven workflows and audit logs are enforced.
-- Finance is protected behind auth and role-based permissions; teachers do not see finance by default.
-- Use real Supabase data; no hardcoded fee schedules, collections, or payroll logic.
+- Current phase: Phase 14 — Homework and assignments
+- Teachers can create assignments with class/section, subject, title, due dates, and marks.
+- Students can view assignments and submit work with status tracking.
+- Teachers review submissions, award marks, and leave feedback.
+- Parents can view child assignment status and progress.
+- Files are stored in Supabase Storage, not in PostgreSQL, and ownership rules are enforced.
+- Assignment data remains protected by auth and role-aware RLS at the database layer.
+- Use real Supabase data; no hardcoded assignment content, student submissions, or storage logic.
