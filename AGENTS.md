@@ -10,10 +10,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 17 — Inventory management
-- Inventory module tracks item categories, units, suppliers, stock items, current quantities, inventory history, and low-stock thresholds.
-- Stock movement is historical and append-only; no direct overwrite of current stock quantity is allowed.
-- Stock-in, stock-out, adjustment, and return transactions are recorded with supplier/cost/location context.
-- Low-stock alerts are surfaced from minimum stock level thresholds.
-- Inventory operations remain protected behind auth and RBAC/RLS.
-- Use real Supabase data; no hardcoded inventory records or mock stock movements.
+- Current phase: Phase 18 — Leave management
+- Leave requests support students, teachers, and staff with leave types, dates, reasons, attachments, approvers, and workflow states.
+- Workflow states are requested -> approved/rejected -> completed.
+- Leave visibility is protected by requester, subject, approver, and school-scoped RLS rules.
+- Leave attachments use the private Supabase Storage bucket `leave-attachments`.
+- Leave dashboard summaries use real Supabase data; no hardcoded leave counts.
