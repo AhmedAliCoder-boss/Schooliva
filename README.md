@@ -1,31 +1,67 @@
 # Schooliva
 
-Schooliva is a production-oriented School ERP foundation built with Next.js,
-TypeScript and Supabase. The project is being developed phase-by-phase; Phase 0
-establishes architecture, project rules and backend integration boundaries.
+Schooliva is a multi-tenant school operations platform built with Next.js,
+TypeScript, Supabase Auth, PostgreSQL, RLS, Storage, and a Flutter client.
+Supabase is the system of record. The web and mobile clients never contain a
+service-role key and do not replace database authorization.
 
-## Local setup
+## Quick start
+
+Requirements: Node.js compatible with the lockfile, npm, and a Supabase project.
 
 ```powershell
-npm install
+npm ci
 Copy-Item .env.example .env.local
+# edit .env.local with the Supabase URL, publishable/anon key, and site URL
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open `http://localhost:3000`.
 
-Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
-`.env.local` before using Supabase features. Never add service-role keys to
-frontend or `NEXT_PUBLIC_*` variables. Set `NEXT_PUBLIC_SITE_URL` to the
-deployed app URL when enabling password recovery in production.
+## Environment variables
 
-## Useful commands
+Required web variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: publishable/anon key only
+- `NEXT_PUBLIC_SITE_URL`: canonical app origin; use HTTPS in production
+
+Keep `.env.local`, test credentials, and mobile `.env` files out of Git. Never
+use `SUPABASE_SERVICE_ROLE_KEY` in `NEXT_PUBLIC_*` variables or browser/mobile
+code. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for host configuration.
+
+## Commands
 
 ```powershell
 npm run dev
 npm run lint
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+npm run test:db
 npm run build
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the planned module
-boundaries, database strategy, security model and Flutter reuse plan.
+Integration, E2E, and database tests require dedicated fixtures or the Supabase
+CLI as described in [docs/TESTING.md](docs/TESTING.md).
+
+## Database and deployment
+
+Link the Supabase CLI to the intended project and apply migrations in order:
+
+```powershell
+supabase login
+supabase link --project-ref <project-ref>
+supabase db push
+```
+
+Deploy the Next.js app to Vercel or another compatible host using `npm ci` and
+`npm run build`. The repository includes [vercel.json](vercel.json).
+
+Read:
+
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/BACKUP_RECOVERY.md](docs/BACKUP_RECOVERY.md)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- [docs/TESTING.md](docs/TESTING.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
