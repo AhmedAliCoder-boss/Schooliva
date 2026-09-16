@@ -3,10 +3,12 @@ import { type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 
+import { isSafeRelativePath } from "@/lib/security/validation";
+
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const next = request.nextUrl.searchParams.get("next");
-  const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const safeNext = isSafeRelativePath(next) ? (next as string) : "/dashboard";
 
   if (code) {
     const supabase = await createClient();
