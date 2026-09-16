@@ -64,7 +64,7 @@ export async function savePayment(_: FinanceFormState | undefined, formData: For
   const parsed = paymentSchema.safeParse(values(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payment form invalid hai." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
-  const reference = `PMT-${Date.now()}`;
+  const reference = `PMT-${crypto.randomUUID()}`;
   const { error } = await supabase.from("fee_payments").insert({
     school_id: schoolId,
     invoice_id: parsed.data.invoiceId,
