@@ -5,11 +5,10 @@ import { redirect } from "next/navigation";
 import { getAuthErrorMessage } from "@/lib/auth/messages";
 import { forgotPasswordSchema, resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
 import { createClient } from "@/lib/supabase/server";
+import { getSafeSiteOrigin, isSafeRelativePath } from "@/lib/security/validation";
 
 function getSafeNextPath(value: FormDataEntryValue | null) {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
-    ? value
-    : "/dashboard";
+  return isSafeRelativePath(typeof value === "string" ? value : null) ? value as string : "/dashboard";
 }
 
 export async function signIn(_: AuthFormState | undefined, formData: FormData): Promise<AuthFormState> {
@@ -40,7 +39,7 @@ export async function requestPasswordReset(_: AuthFormState | undefined, formDat
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
 
   const supabase = await createClient();
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? new URL("http://localhost:3000").origin;
+  const origin = getSafeSiteOrigin();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
   });
