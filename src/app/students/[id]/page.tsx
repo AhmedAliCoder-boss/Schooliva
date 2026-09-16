@@ -9,7 +9,7 @@ function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (
 export default async function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params; const { supabase, schoolId } = await requireStudentContext("view");
   const [{ data: student }, { data: parents }, { data: enrollments }, { data: classes }, { data: sections }, { data: sessions }, { data: documents }] = await Promise.all([
-    supabase.from("students").select("*").eq("id", id).eq("school_id", schoolId).maybeSingle(),
+    supabase.from("students").select("id,admission_number,student_identifier,first_name,middle_name,last_name,date_of_birth,gender,blood_group,nationality,status,phone,email,address,admission_date,emergency_contact_name,emergency_contact_phone").eq("id", id).eq("school_id", schoolId).maybeSingle(),
     supabase.from("student_parents").select("relationship,is_primary,parents(first_name,last_name,phone,email)").eq("student_id", id).eq("school_id", schoolId),
     supabase.from("student_enrollments").select("id,roll_number,enrolled_on,status,withdrawn_at,classes(name),sections(name),academic_sessions(name),academic_terms(name)").eq("student_id", id).eq("school_id", schoolId).order("enrolled_on", { ascending: false }),
     supabase.from("classes").select("id,name").eq("school_id", schoolId).eq("status", "active").order("name"),
