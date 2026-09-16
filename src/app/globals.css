@@ -113,6 +113,12 @@ h1 { font-size: clamp(3.5rem, 7vw, 7.2rem); font-weight: 500; letter-spacing: -.
 .dashboard-links { margin-top: 75px; }
 .dashboard-links a { border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; max-width: 520px; padding: 18px 0; }
 .dashboard-links span { color: var(--moss); }
+.dashboard-metrics { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 42px; max-width: 1100px; }
+.dashboard-metric-card { background: white; border: 1px solid #e3ebf6; display: flex; flex-direction: column; min-height: 150px; padding: 20px; transition: border-color .2s ease, transform .2s ease; }
+.dashboard-metric-card:hover { border-color: #93c5fd; transform: translateY(-2px); }
+.dashboard-metric-card span { color: #64748b; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; }
+.dashboard-metric-card strong { color: #0f172a; font-size: 2.4rem; font-weight: 550; letter-spacing: -.08em; margin-top: 28px; }
+.dashboard-metric-card small { color: #2563eb; font-size: .7rem; margin-top: auto; }
 .profile-section { max-width: 560px; padding: 100px 0; }
 .profile-form { margin-top: 40px; }
 
@@ -194,4 +200,5 @@ h1 { font-size: clamp(3.5rem, 7vw, 7.2rem); font-weight: 500; letter-spacing: -.
   .auth-aside { min-height: 280px; padding: 40px 24px; }
   .dashboard-welcome { padding: 75px 0 65px; }
   .profile-section { padding: 75px 0; }
+  .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
