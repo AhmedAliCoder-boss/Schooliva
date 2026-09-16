@@ -19,7 +19,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ i
   const session = relation<{ name: string }>(examRecord.academic_sessions);
   const school = relation<{ name: string }>(examRecord.schools);
   const scale = relation<{ name: string }>(examRecord.grading_scales);
-  const { data: resultRows } = await supabase.from("published_exam_results").select("*").eq("exam_id", id).eq("school_id", schoolId).order("subject_name");
+  const { data: resultRows } = await supabase.from("published_exam_results").select("exam_subject_id,student_id,first_name,middle_name,last_name,admission_number,class_name,section_name,subject_name,subject_code,obtained_marks,maximum_marks,percentage,grade,remarks").eq("exam_id", id).eq("school_id", schoolId).order("subject_name");
   const rows = (resultRows ?? []) as Array<Record<string, unknown>>;
   if (!rows.length) return <main className="students-shell"><header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link></header><section className="student-empty"><h3>No published result data</h3><p>Marks are not published for this exam yet.</p></section></main>;
 
