@@ -10,10 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 15 — Library management
-- Library catalog includes books, authors, categories, publishers, ISBN, copies, and availability.
-- Members support both students and teachers with tracked membership data.
-- Book circulation tracks issue, return, due date, overdue, and fine calculations.
-- Unavailable copies cannot be issued; circulation uses transaction-safe database checks.
-- Library inventory, issued books, overdue books, search, and reports are provided through protected library workflows.
-- Use real Supabase data; no hardcoded inventory, borrowed items, or circulation records.
+- Current phase: Phase 16 — Transport management
+- Transport module manages vehicles, capacity, drivers, routes, stops, student route assignments, and transport fees.
+- Vehicle capacity is enforced at the database layer to prevent assigning students beyond seat limits.
+- Route assignment includes pickup and drop-off stop tracking with school-scoped route mappings.
+- Transport reports and fleet status are protected behind auth and RBAC/RLS.
+- GPS integration is intentionally not implemented yet; architecture remains ready for future location-aware features.
+- Use real Supabase data; no hardcoded vehicles, route assignments, or transport fee data.
