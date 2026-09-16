@@ -10,9 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 12 — Results and report cards
-- Published results are the only result set exposed to students/parents.
-- Exam workflow states: draft -> submitted -> reviewed -> published.
-- Grading is configurable via grading scales and grade boundaries.
-- All protected pages remain behind auth and RBAC/RLS checks.
-- Use real Supabase data; no hardcoded attendance, timetable, curriculum, or result statistics.
+- Current phase: Phase 13 — Fees and finance
+- Fee structures are session/class scoped with numeric money values and due dates.
+- Invoices track subtotal, discount, late fee, total, paid, remaining, status, and due date.
+- Payments are recorded with references, method, date, received-by, and notes.
+- Financial records are never silently deleted; status-driven workflows and audit logs are enforced.
+- Finance is protected behind auth and role-based permissions; teachers do not see finance by default.
+- Use real Supabase data; no hardcoded fee schedules, collections, or payroll logic.
