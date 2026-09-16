@@ -10,11 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 14 — Homework and assignments
-- Teachers can create assignments with class/section, subject, title, due dates, and marks.
-- Students can view assignments and submit work with status tracking.
-- Teachers review submissions, award marks, and leave feedback.
-- Parents can view child assignment status and progress.
-- Files are stored in Supabase Storage, not in PostgreSQL, and ownership rules are enforced.
-- Assignment data remains protected by auth and role-aware RLS at the database layer.
-- Use real Supabase data; no hardcoded assignment content, student submissions, or storage logic.
+- Current phase: Phase 15 — Library management
+- Library catalog includes books, authors, categories, publishers, ISBN, copies, and availability.
+- Members support both students and teachers with tracked membership data.
+- Book circulation tracks issue, return, due date, overdue, and fine calculations.
+- Unavailable copies cannot be issued; circulation uses transaction-safe database checks.
+- Library inventory, issued books, overdue books, search, and reports are provided through protected library workflows.
+- Use real Supabase data; no hardcoded inventory, borrowed items, or circulation records.
