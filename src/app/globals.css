@@ -113,6 +113,8 @@ h1 { font-size: clamp(3.5rem, 7vw, 7.2rem); font-weight: 500; letter-spacing: -.
 .dashboard-links { margin-top: 75px; }
 .dashboard-links a { border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; max-width: 520px; padding: 18px 0; }
 .dashboard-links span { color: var(--moss); }
+.pwa-install-banner { align-items: center; background: #0f172a; color: white; display: flex; gap: 10px; justify-content: space-between; padding: 10px 16px; position: sticky; top: 0; z-index: 50; }
+.pwa-install-banner button { background: #d6e85b; border: 0; color: #0f172a; cursor: pointer; font: inherit; font-weight: 700; padding: 8px 12px; }
 .global-search { margin: 0 auto; max-width: 1000px; width: 100%; }
 .global-search input { background: white; border: 1px solid #dfeaf8; border-radius: 12px; font: inherit; padding: 16px 18px; width: 100%; }
 .global-search-results { display: grid; gap: 14px; margin-top: 20px; }

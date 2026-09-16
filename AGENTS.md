@@ -10,8 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 23 — Search, reporting, and export
-- Global search is server-side and permission-scoped so only authorized records appear.
-- Search covers students, teachers, parents, classes, invoices, books, and assignments.
-- Reports are generated from database summary functions and allow filters for date ranges, classes, sections, and academic sessions.
-- Export-friendly layouts and print-ready reports are kept server-side and avoid loading whole tables into the browser.
+- Current phase: Phase 25 — Responsive PWA
+- Schooliva is implemented as a responsive, installable PWA with a safe offline shell and manifest-based app install support.
+- Sensitive financial and academic data is not cached offline; the service worker only caches public shell assets and static app resources.
+- Mobile, tablet, and desktop layouts prioritize responsive navigation, accessible controls, and smaller touch targets.
+- Supabase data remains network-gated and permission-scoped; no private data is cached insecurely.
