@@ -22,6 +22,7 @@ export const config = {
     "/results/:path*",
     "/finance/:path*",
     "/assignments/:path*",
+    "/library/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
