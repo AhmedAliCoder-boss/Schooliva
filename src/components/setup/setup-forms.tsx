@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { assignSubject, bootstrapSchool, createClass, createSection, createSession, createSubject, createTerm, deleteSetupRecord, updateSchool, updateSettings, type SetupFormState } from "@/app/actions/setup";
 
 import { SubmitButton } from "@/components/auth/submit-button";
+import { SearchableOption, useIntlOptions } from "@/components/setup/searchable-option";
 
 function Feedback({ state }: { state: SetupFormState | undefined }) {
   return <>{state?.error && <p className="setup-error">{state.error}</p>}{state?.success && <p className="setup-success">{state.success}</p>}</>;
@@ -16,7 +17,8 @@ function Field({ label, name, type = "text", defaultValue, required = true, plac
 
 export function BootstrapSchoolForm() {
   const [state, action] = useActionState(bootstrapSchool, undefined);
-  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><Field label="School name" name="name" placeholder="Greenfield Academy" /><Field label="Slug" name="slug" placeholder="greenfield-academy" /><Field label="School code" name="code" placeholder="GFA" /><Field label="Email" name="email" type="email" required={false} /><Field label="Phone" name="phone" required={false} /><Field label="Timezone" name="timezone" defaultValue="UTC" /><Field label="Currency" name="currency" defaultValue="USD" /></div><SubmitButton>Create school</SubmitButton></form>;
+  const { timeZones, currencies } = useIntlOptions();
+  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><Field label="School name" name="name" placeholder="Greenfield Academy" /><Field label="Slug" name="slug" placeholder="greenfield-academy" /><Field label="School code" name="code" placeholder="GFA" /><Field label="Email" name="email" type="email" required={false} /><Field label="Phone" name="phone" required={false} /><SearchableOption label="Timezone" name="timezone" defaultValue="UTC" options={timeZones} placeholder="Search timezone..." /><SearchableOption label="Currency" name="currency" defaultValue="USD" options={currencies} placeholder="Search currency..." /></div><SubmitButton>Create school</SubmitButton></form>;
 }
 
 export function SchoolProfileForm({ school }: { school: Record<string, string | null> }) {
@@ -26,7 +28,8 @@ export function SchoolProfileForm({ school }: { school: Record<string, string | 
 
 export function SettingsForm({ settings }: { settings: Record<string, string | null> }) {
   const [state, action] = useActionState(updateSettings, undefined);
-  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><Field label="Timezone" name="timezone" defaultValue={settings.timezone ?? "UTC"} /><Field label="Currency" name="currency" defaultValue={settings.currency_code ?? "USD"} /><Field label="Date format" name="dateFormat" defaultValue={settings.date_format ?? "YYYY-MM-DD"} /></div><SubmitButton>Save settings</SubmitButton></form>;
+  const { timeZones, currencies, dateFormats } = useIntlOptions();
+  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><SearchableOption label="Timezone" name="timezone" defaultValue={settings.timezone ?? "UTC"} options={timeZones} placeholder="Search timezone..." /><SearchableOption label="Currency" name="currency" defaultValue={settings.currency_code ?? "USD"} options={currencies} placeholder="Search currency..." /><SearchableOption label="Date format" name="dateFormat" defaultValue={settings.date_format ?? "YYYY-MM-DD"} options={dateFormats} placeholder="Search date format..." /></div><SubmitButton>Save settings</SubmitButton></form>;
 }
 
 export function SessionForm({ initial }: { initial?: Record<string, string> }) {

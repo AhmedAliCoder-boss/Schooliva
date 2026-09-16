@@ -3,6 +3,10 @@ import { z } from "zod";
 const requiredText = (label: string) => z.string().trim().min(1, `${label} required hai.`);
 const optionalText = z.string().trim().optional();
 const dateField = z.string().trim().min(1, "Date required hai.");
+const supportedTimezones = new Set(["UTC", ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])]);
+const supportedCurrencies = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : []);
+const timezoneField = requiredText("Timezone").refine((value) => supportedTimezones.has(value), "Timezone list se valid option select karein.");
+const currencyField = z.string().trim().length(3, "Currency 3 letters ki honi chahiye.").toUpperCase().refine((value) => supportedCurrencies.has(value), "Currency list se valid option select karein.");
 
 export const bootstrapSchoolSchema = z.object({
   name: requiredText("School name"),
@@ -10,15 +14,15 @@ export const bootstrapSchoolSchema = z.object({
   code: requiredText("School code").max(20),
   email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
   phone: optionalText,
-  timezone: requiredText("Timezone"),
-  currency: z.string().trim().length(3, "Currency 3 letters ki honi chahiye.").toUpperCase(),
+  timezone: timezoneField,
+  currency: currencyField,
 });
 
 export const schoolProfileSchema = bootstrapSchoolSchema.omit({ timezone: true, currency: true });
 
 export const settingsSchema = z.object({
-  timezone: requiredText("Timezone"),
-  currency: z.string().trim().length(3, "Currency 3 letters ki honi chahiye.").toUpperCase(),
+  timezone: timezoneField,
+  currency: currencyField,
   dateFormat: requiredText("Date format"),
 });
 
