@@ -29,6 +29,8 @@ export const config = {
     "/notifications/:path*",
     "/documents/:path*",
     "/audit/:path*",
+    "/search/:path*",
+    "/reports/:path*",
     "/sign-in",
     "/forgot-password",
     "/reset-password",
