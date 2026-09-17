@@ -10,15 +10,36 @@ const currencyField = z.string().trim().length(3, "Currency 3 letters ki honi ch
 
 export const bootstrapSchoolSchema = z.object({
   name: requiredText("School name"),
+  shortName: requiredText("Short name").max(30),
   slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug lowercase letters, numbers aur hyphens mein hona chahiye."),
   code: requiredText("School code").max(20),
+  schoolType: requiredText("School type"),
+  campus: requiredText("Campus"),
+  academicYear: requiredText("Academic year"),
+  board: requiredText("Board"),
+  medium: requiredText("Medium"),
   email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
   phone: optionalText,
+  website: optionalText,
+  address: requiredText("Address"),
+  city: requiredText("City"),
+  province: requiredText("Province"),
+  country: requiredText("Country"),
+  principal: requiredText("Principal"),
+  establishedYear: z.coerce.number().int().min(1800).max(new Date().getFullYear()),
   timezone: timezoneField,
   currency: currencyField,
 });
 
-export const schoolProfileSchema = bootstrapSchoolSchema.omit({ timezone: true, currency: true });
+export const schoolProfileSchema = z.object({
+  name: requiredText("School name"),
+  slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug lowercase letters, numbers aur hyphens mein hona chahiye."),
+  code: requiredText("School code").max(20),
+  email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
+  phone: optionalText,
+  website: optionalText,
+  address: optionalText,
+});
 
 export const settingsSchema = z.object({
   timezone: timezoneField,

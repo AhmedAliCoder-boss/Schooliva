@@ -2,37 +2,51 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAuthErrorMessage } from "@/lib/auth/messages";
 import { requireUser } from "@/lib/auth/authorization";
 import { requireSetupContext } from "@/lib/setup/context";
 import { bootstrapSchoolSchema, classSchema, schoolProfileSchema, sectionSchema, sessionSchema, settingsSchema, subjectSchema, termSchema } from "@/lib/setup/schemas";
 
-export type SetupFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]> };
+export type SetupFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; values?: Record<string, string> };
 
 function values(formData: FormData) {
   return Object.fromEntries(formData.entries());
 }
 
-function invalid(error: { flatten: () => { fieldErrors: Record<string, string[]> } }): SetupFormState {
-  return { fieldErrors: error.flatten().fieldErrors };
+function submittedValues(formData: FormData) {
+  return Object.fromEntries([...formData.entries()].filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+}
+
+function invalid(error: { flatten: () => { fieldErrors: Record<string, string[]> } }, formData: FormData): SetupFormState {
+  return { fieldErrors: error.flatten().fieldErrors, values: submittedValues(formData) };
 }
 
 export async function bootstrapSchool(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
   const parsed = bootstrapSchoolSchema.safeParse(values(formData));
-  if (!parsed.success) return invalid(parsed.error);
+  if (!parsed.success) return invalid(parsed.error, formData);
   const current = await requireUser();
   const { data, error } = await current.supabase.rpc("bootstrap_school", {
     school_name: parsed.data.name, school_slug: parsed.data.slug, school_code: parsed.data.code,
     school_email: parsed.data.email || null, school_phone: parsed.data.phone || null,
     school_timezone: parsed.data.timezone, school_currency: parsed.data.currency,
+    school_short_name: parsed.data.shortName, school_campus: parsed.data.campus, school_type: parsed.data.schoolType,
+    school_board: parsed.data.board, school_medium: parsed.data.medium, school_address: parsed.data.address,
+    school_city: parsed.data.city, school_province: parsed.data.province, school_country: parsed.data.country,
+    school_principal: parsed.data.principal, school_established_year: parsed.data.establishedYear,
+    school_academic_year: parsed.data.academicYear, school_website: parsed.data.website || null,
   });
-  if (error) return { error: getAuthErrorMessage(error.message) };
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (error.code === "23505" || message.includes("duplicate key")) return { error: "School slug ya code already use ho raha hai." };
+    if (message.includes("function public.bootstrap_school") || message.includes("does not exist")) return { error: "School setup migration Supabase par apply nahi hui. Migration run karke dobara try karein." };
+    if (message.includes("authentication required")) return { error: "Session expire ho gaya hai. Dobara sign in karein." };
+    return { error: "School create nahi ho saki. Form details check karke dobara try karein." };
+  }
   revalidatePath("/setup"); revalidatePath("/dashboard");
   return data ? { success: "School create ho gayi." } : { error: "School create nahi ho saki." };
 }
 
 export async function updateSchool(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = schoolProfileSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = schoolProfileSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const { error } = await supabase.from("schools").update({ name: parsed.data.name, slug: parsed.data.slug, code: parsed.data.code, email: parsed.data.email || null, phone: parsed.data.phone || null, website: formData.get("website")?.toString().trim() || null, address: formData.get("address")?.toString().trim() || null }).eq("id", schoolId);
   if (error) return { error: error.code === "23505" ? "Slug ya code already use ho raha hai." : "School profile update nahi hui." };
@@ -40,7 +54,7 @@ export async function updateSchool(_: SetupFormState | undefined, formData: Form
 }
 
 export async function updateSettings(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = settingsSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = settingsSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const { error } = await supabase.from("school_settings").update({ timezone: parsed.data.timezone, currency_code: parsed.data.currency, date_format: parsed.data.dateFormat }).eq("school_id", schoolId);
   if (error) return { error: "School settings save nahi hui." };
@@ -48,7 +62,7 @@ export async function updateSettings(_: SetupFormState | undefined, formData: Fo
 }
 
 export async function createSession(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = sessionSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = sessionSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const id = String(formData.get("id") ?? "");
   const payload = { name: parsed.data.name, code: parsed.data.code, starts_on: parsed.data.startsOn, ends_on: parsed.data.endsOn, status: parsed.data.status, is_current: parsed.data.status === "active" };
@@ -58,7 +72,7 @@ export async function createSession(_: SetupFormState | undefined, formData: For
 }
 
 export async function createTerm(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = termSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = termSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const id = String(formData.get("id") ?? "");
   const payload = { academic_session_id: parsed.data.academicSessionId, name: parsed.data.name, code: parsed.data.code, starts_on: parsed.data.startsOn, ends_on: parsed.data.endsOn, status: parsed.data.status, is_current: parsed.data.status === "active" };
@@ -68,7 +82,7 @@ export async function createTerm(_: SetupFormState | undefined, formData: FormDa
 }
 
 export async function createClass(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = classSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = classSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const id = String(formData.get("id") ?? "");
   const payload = { name: parsed.data.name, code: parsed.data.code, description: parsed.data.description || null, status: parsed.data.status };
@@ -78,7 +92,7 @@ export async function createClass(_: SetupFormState | undefined, formData: FormD
 }
 
 export async function createSection(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = sectionSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = sectionSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const id = String(formData.get("id") ?? "");
   const payload = { class_id: parsed.data.classId, name: parsed.data.name, code: parsed.data.code, capacity: parsed.data.capacity || null, class_teacher_id: parsed.data.classTeacherId || null, status: parsed.data.status };
@@ -88,7 +102,7 @@ export async function createSection(_: SetupFormState | undefined, formData: For
 }
 
 export async function createSubject(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
-  const parsed = subjectSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
+  const parsed = subjectSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
   const id = String(formData.get("id") ?? "");
   const payload = { name: parsed.data.name, code: parsed.data.code, subject_type: parsed.data.subjectType, status: parsed.data.status, is_active: parsed.data.status === "active" };

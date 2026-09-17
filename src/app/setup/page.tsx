@@ -33,7 +33,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Search
   const section = sections.some(([key]) => key === params.section) ? params.section! : "school";
   const search = asSearch(params.search); const page = asPage(params.page); const pageSize = 8; const from = (page - 1) * pageSize; const to = from + pageSize;
   const [{ data: schoolData }, { data: settingsData }, { data: sessionsData }, { data: termsData }, { data: classesData }, { data: sectionsData }, { data: subjectsData }, { data: assignmentsData }, { data: teachersData }] = await Promise.all([
-    supabase.from("schools").select("id,name,slug,code,email,phone,website,address").eq("id", schoolId).maybeSingle(),
+    supabase.from("schools").select("id,name,short_name,slug,code,school_type,campus,board,medium,email,phone,website,address,city,state,country,principal,established_year").eq("id", schoolId).maybeSingle(),
     supabase.from("school_settings").select("timezone,currency_code,date_format").eq("school_id", schoolId).maybeSingle(),
     supabase.from("academic_sessions").select("id,name,code,starts_on,ends_on,status").eq("school_id", schoolId).order("starts_on", { ascending: false }).ilike(search ? "name" : "code", search ? `%${search}%` : "%").range(from, to),
     supabase.from("academic_terms").select("id,name,code,starts_on,ends_on,status,academic_session_id,academic_sessions(name)").eq("school_id", schoolId).order("starts_on", { ascending: false }).ilike(search ? "name" : "code", search ? `%${search}%` : "%").range(from, to),
