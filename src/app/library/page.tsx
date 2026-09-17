@@ -33,9 +33,13 @@ export default async function LibraryPage() {
   const copyOptions = (copies ?? []).map((item) => ({ id: String(item.id), name: `${String((relation<{ title: string }>(item.library_books))?.title ?? "Book")} · ${String(item.copy_number)} · ${String(item.status)}` }));
   const memberOptions = (members ?? []).map((item) => ({ id: String(item.id), name: `${String(item.member_type)} · ${String(item.membership_number)}` }));
 
+  const activeCopies = (copies ?? []).filter((copy) => String(copy.status).toLowerCase() === "available").length;
+  const issuedCopies = (copies ?? []).filter((copy) => String(copy.status).toLowerCase() === "issued").length;
+  const overdueCount = (transactions ?? []).filter((transaction) => String(transaction.status).toLowerCase() === "overdue").length;
   return <main className="students-shell">
     <header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header>
-    <section className="students-heading"><div><p className="eyebrow">Library</p><h1>Books, members, and circulation.</h1><p>Manage inventory, availability, circulation, and overdue handling with transactional safeguards.</p></div></section>
+    <section className="module-page-header"><div className="module-page-header__row"><div><p className="module-page-header__eyebrow">Library</p><h1>Books, members, and circulation.</h1><p>Manage inventory, availability, circulation, and overdue handling with transactional safeguards.</p></div></div></section>
+    <section className="module-kpi-grid"><article className="module-kpi"><span>Books</span><strong>{(books ?? []).length}</strong></article><article className="module-kpi"><span>Available</span><strong>{activeCopies}</strong></article><article className="module-kpi"><span>Issued</span><strong>{issuedCopies}</strong></article><article className="module-kpi"><span>Overdue</span><strong>{overdueCount}</strong></article></section>
     <section className="setup-card"><h3>Catalog</h3><AuthorForm /><CategoryForm /><PublisherForm /><BookForm authors={authorOptions} categories={categoryOptions} publishers={publisherOptions} /></section>
     <section className="setup-card"><h3>Members</h3><MemberForm students={studentOptions} teachers={teacherOptions} /></section>
     <section className="setup-card"><h3>Issue / return</h3><IssueBookForm copies={copyOptions} members={memberOptions} /></section>

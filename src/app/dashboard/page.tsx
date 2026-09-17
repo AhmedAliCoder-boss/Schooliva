@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/actions/auth";
 import { createClient } from "@/lib/supabase/server";
+import { SchoolivaShell } from "@/components/schooliva-shell";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -46,10 +47,17 @@ export default async function DashboardPage() {
     ["Unread notifications", metrics.unread_notifications ?? 0, "notifications"],
   ];
 
-  return <main className="dashboard-shell"><header className="dashboard-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><form action={signOut}><button className="sign-out" type="submit">Sign out</button></form></header>
-    <section className="dashboard-welcome"><p className="eyebrow">Your school workspace</p><h1>Good to see you, {profile?.full_name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "there"}.</h1><p>Schooliva foundation is ready for your school operations.</p></section>
-    {membership && school ? <section className="workspace-summary"><span className="principle-number">CURRENT SCHOOL</span><h2>{school.name}</h2><p>{role?.name ?? "School member"}</p></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
-    {membership?.school_id && <section className="dashboard-metrics" aria-label="Dashboard summary">{metricCards.map(([label, value, href]) => <Link className="dashboard-metric-card" href={`/${href}`} key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong><small>Open module -&gt;</small></Link>)}</section>}
-    <nav className="dashboard-links" aria-label="Account navigation"><Link href="/search">Search <span>-&gt;</span></Link><Link href="/reports">Reports <span>-&gt;</span></Link><Link href="/students">Students <span>-&gt;</span></Link><Link href="/teachers">Teachers <span>-&gt;</span></Link><Link href="/staff">Staff <span>-&gt;</span></Link><Link href="/parents">Parents <span>-&gt;</span></Link><Link href="/attendance">Attendance <span>-&gt;</span></Link><Link href="/timetable">Timetable <span>-&gt;</span></Link><Link href="/curriculum">Curriculum <span>-&gt;</span></Link><Link href="/exams">Exams <span>-&gt;</span></Link><Link href="/results">Results <span>-&gt;</span></Link><Link href="/finance">Finance <span>-&gt;</span></Link><Link href="/assignments">Assignments <span>-&gt;</span></Link><Link href="/library">Library <span>-&gt;</span></Link><Link href="/transport">Transport <span>-&gt;</span></Link><Link href="/inventory">Inventory <span>-&gt;</span></Link><Link href="/leave">Leave <span>-&gt;</span></Link><Link href="/notifications">Notifications <span>-&gt;</span></Link><Link href="/documents">Documents <span>-&gt;</span></Link><Link href="/audit">Audit log <span>-&gt;</span></Link><Link href="/setup">School setup <span>-&gt;</span></Link><Link href="/profile">Manage your profile <span>-&gt;</span></Link></nav>
-  </main>;
+  return (
+    <SchoolivaShell
+      title="Dashboard"
+      description="Schooliva is ready to support your school operations with a clearer, faster view of what matters."
+      breadcrumbs={[{ label: "Dashboard" }]}
+      actions={<form action={signOut}><button className="sign-out" type="submit">Sign out</button></form>}
+    >
+      <section className="dashboard-welcome"><p className="eyebrow">Your school workspace</p><h1>Good to see you, {profile?.full_name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "there"}.</h1></section>
+      {membership && school ? <section className="workspace-summary"><span className="principle-number">CURRENT SCHOOL</span><h2>{school.name}</h2><p>{role?.name ?? "School member"}</p></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
+      {membership?.school_id && <section className="dashboard-metrics" aria-label="Dashboard summary">{metricCards.map(([label, value, href]) => <Link className="dashboard-metric-card" href={`/${href}`} key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong><small>Open module -&gt;</small></Link>)}</section>}
+      <nav className="dashboard-links" aria-label="Account navigation"><Link href="/search">Search <span>-&gt;</span></Link><Link href="/reports">Reports <span>-&gt;</span></Link><Link href="/students">Students <span>-&gt;</span></Link><Link href="/teachers">Teachers <span>-&gt;</span></Link><Link href="/staff">Staff <span>-&gt;</span></Link><Link href="/parents">Parents <span>-&gt;</span></Link><Link href="/attendance">Attendance <span>-&gt;</span></Link><Link href="/timetable">Timetable <span>-&gt;</span></Link><Link href="/curriculum">Curriculum <span>-&gt;</span></Link><Link href="/exams">Exams <span>-&gt;</span></Link><Link href="/results">Results <span>-&gt;</span></Link><Link href="/finance">Finance <span>-&gt;</span></Link><Link href="/assignments">Assignments <span>-&gt;</span></Link><Link href="/library">Library <span>-&gt;</span></Link><Link href="/transport">Transport <span>-&gt;</span></Link><Link href="/inventory">Inventory <span>-&gt;</span></Link><Link href="/leave">Leave <span>-&gt;</span></Link><Link href="/notifications">Notifications <span>-&gt;</span></Link><Link href="/documents">Documents <span>-&gt;</span></Link><Link href="/audit">Audit log <span>-&gt;</span></Link><Link href="/setup">School setup <span>-&gt;</span></Link><Link href="/profile">Manage your profile <span>-&gt;</span></Link></nav>
+    </SchoolivaShell>
+  );
 }
