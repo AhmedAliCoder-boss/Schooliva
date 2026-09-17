@@ -26,9 +26,15 @@ export default async function FinancePage() {
   const invoiceOptions = (invoices ?? []).map((invoice) => ({ id: String(invoice.id), name: `${invoice.invoice_number} - ${String(invoice.status)}` }));
   const studentOptions = (students ?? []).map((student) => ({ id: String(student.id), name: `${student.first_name ?? ""} ${student.last_name ?? ""} (${student.admission_number ?? "-"})`.trim() }));
 
+  const financeInvoices = invoices ?? [];
+  const totalCollected = financeInvoices.reduce((sum, invoice) => sum + Number(invoice.paid_amount ?? 0), 0);
+  const totalOutstanding = financeInvoices.reduce((sum, invoice) => sum + Number(invoice.remaining_amount ?? 0), 0);
+  const paidCount = financeInvoices.filter((invoice) => String(invoice.status).toLowerCase() === "paid").length;
+  const overdueCount = financeInvoices.filter((invoice) => String(invoice.status).toLowerCase() === "overdue").length;
   return <main className="students-shell">
     <header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header>
-    <section className="students-heading"><div><p className="eyebrow">Finance</p><h1>Fee and finance.</h1><p>Transaction-safe fee structures, invoices, payments, and collection dashboards.</p></div></section>
+    <section className="module-page-header"><div className="module-page-header__row"><div><p className="module-page-header__eyebrow">Finance</p><h1>Fee and finance.</h1><p>Transaction-safe fee structures, invoices, payments, and collection dashboards.</p></div></div></section>
+    <section className="module-kpi-grid"><article className="module-kpi"><span>Total collected</span><strong>{totalCollected}</strong></article><article className="module-kpi"><span>Outstanding</span><strong>{totalOutstanding}</strong></article><article className="module-kpi"><span>Paid invoices</span><strong>{paidCount}</strong></article><article className="module-kpi"><span>Overdue</span><strong>{overdueCount}</strong></article></section>
     <section className="setup-card"><h3>Fee structure</h3><FeeStructureForm sessions={sessions ?? []} classes={classes ?? []} /></section>
     <section className="setup-card"><h3>Generate invoice</h3><InvoiceForm sessions={sessions ?? []} students={studentOptions} feeStructures={feeStructureOptions} /></section>
     <section className="setup-card"><h3>Record payment</h3><PaymentForm invoices={invoiceOptions} /></section>

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { SignInForm } from "@/components/auth/sign-in-form";
@@ -7,7 +8,9 @@ type SearchParams = Promise<{ next?: string; message?: string; error?: string }>
 export default async function SignInPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   return <main className="auth-page"><section className="auth-panel">
-    <Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link>
+    <Link className="brand-logo" href="/" aria-label="Schooliva home">
+      <Image src="/brand/logo.png" alt="Schooliva" width={220} height={80} priority />
+    </Link>
     <p className="eyebrow">Welcome back</p><h1>Sign in to Schooliva.</h1>
     <p className="auth-intro">School operations, clearly managed.</p>
     <SignInForm nextPath={params.next} message={params.message} error={params.error} />

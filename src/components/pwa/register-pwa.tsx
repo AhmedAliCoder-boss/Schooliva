@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+const INSTALL_PROMPT_SHOWN_KEY = "schooliva-install-prompt-shown";
+
 export function RegisterPwa() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -14,7 +17,12 @@ export function RegisterPwa() {
 
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
+
+      if (sessionStorage.getItem(INSTALL_PROMPT_SHOWN_KEY) === "true") return;
+
+      sessionStorage.setItem(INSTALL_PROMPT_SHOWN_KEY, "true");
       setDeferredPrompt(event as BeforeInstallPromptEvent);
+      setIsOpen(true);
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -28,16 +36,43 @@ export function RegisterPwa() {
     deferredPrompt.prompt();
     await deferredPrompt.userChoice;
     setDeferredPrompt(null);
+    setIsOpen(false);
   };
 
-  if (!deferredPrompt) return null;
+  const handleClose = () => {
+    setDeferredPrompt(null);
+    setIsOpen(false);
+  };
+
+  if (!deferredPrompt || !isOpen) return null;
 
   return (
-    <div className="pwa-install-banner" role="status" aria-live="polite">
-      <span>Install Schooliva for faster access on this device.</span>
-      <button type="button" onClick={handleInstall} aria-label="Install Schooliva app">
-        Install app
-      </button>
+    <div className="pwa-install-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
+      <div className="pwa-install-modal">
+        <button
+          type="button"
+          className="pwa-install-close"
+          onClick={handleClose}
+          aria-label="Close install app prompt"
+        >
+          ×
+        </button>
+
+        <div className="pwa-install-content">
+          <span className="pwa-install-badge">Schooliva</span>
+          <h2 id="pwa-install-title">Install the app</h2>
+          <p>Install Schooliva for faster access and a smoother experience on this device.</p>
+        </div>
+
+        <div className="pwa-install-actions">
+          <button type="button" className="pwa-install-secondary" onClick={handleClose}>
+            Close
+          </button>
+          <button type="button" className="pwa-install-primary" onClick={handleInstall} aria-label="Install Schooliva app">
+            Install app
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
