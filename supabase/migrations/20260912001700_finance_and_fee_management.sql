@@ -138,14 +138,22 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  actor_id uuid;
 begin
+  if tg_table_name = 'fee_payments' then
+    actor_id := coalesce(new.received_by, old.received_by);
+  elsif tg_table_name = 'fee_invoices' then
+    actor_id := coalesce(new.created_by, old.created_by);
+  end if;
+
   insert into public.finance_audit_logs (school_id, entity_type, entity_id, action, actor_id, payload)
   values (
     coalesce(new.school_id, old.school_id),
     tg_table_name,
     coalesce(new.id, old.id),
     lower(tg_op),
-    coalesce(new.created_by, new.received_by, old.created_by, old.received_by),
+    actor_id,
     to_jsonb(coalesce(new, old))
   );
   return coalesce(new, old);

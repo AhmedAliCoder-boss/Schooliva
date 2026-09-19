@@ -21,6 +21,16 @@ values
   ('10000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'student@schooliva.demo', crypt('SchoolivaDemo@123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Alina Iqbal"}', '', '', '', '', now(), now())
 on conflict (id) do nothing;
 
+insert into auth.identities (id, provider, provider_id, user_id, identity_data, created_at, updated_at)
+values
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '{"sub": "10000000-0000-0000-0000-000000000001", "email": "admin@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now()),
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '{"sub": "10000000-0000-0000-0000-000000000002", "email": "principal@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now()),
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000003', '{"sub": "10000000-0000-0000-0000-000000000003", "email": "teacher@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now()),
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000004', '{"sub": "10000000-0000-0000-0000-000000000004", "email": "accounts@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now()),
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000005', '{"sub": "10000000-0000-0000-0000-000000000005", "email": "parent@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now()),
+  (gen_random_uuid(), 'email', '10000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000006', '{"sub": "10000000-0000-0000-0000-000000000006", "email": "student@schooliva.demo", "email_verified": false, "phone_verified": false}', now(), now())
+on conflict (provider, provider_id) do nothing;
+
 update public.profiles
 set phone = case id
   when '10000000-0000-0000-0000-000000000001' then '+92 300 1000001'
@@ -188,7 +198,7 @@ values
   ('81000000-0000-0000-0000-000000000002', 'F', 0, 59.99, 0, 'Needs improvement');
 
 insert into public.exams (id, school_id, academic_session_id, exam_type_id, name, starts_on, ends_on, status, grading_scale_id, created_by)
-values ('82000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '81000000-0000-0000-0000-000000000001', 'Term 1 Assessment 2026', current_date - 14, current_date - 7, 'published', '81000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002');
+values ('82000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '81000000-0000-0000-0000-000000000001', 'Term 1 Assessment 2026', current_date - 14, current_date - 7, 'draft', '81000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002');
 
 insert into public.exam_subjects (id, school_id, exam_id, subject_id, class_id, maximum_marks, passing_marks)
 values
@@ -202,6 +212,14 @@ values
   ('20000000-0000-0000-0000-000000000001', '82000000-0000-0000-0000-000000000003', '70000000-0000-0000-0000-000000000001', 86, 'B', 'Strong practical understanding', '10000000-0000-0000-0000-000000000003'),
   ('20000000-0000-0000-0000-000000000001', '82000000-0000-0000-0000-000000000004', '70000000-0000-0000-0000-000000000001', 94, 'A', 'Confident communicator', '10000000-0000-0000-0000-000000000003'),
   ('20000000-0000-0000-0000-000000000001', '82000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000002', 78, 'C', 'Keep practising word problems', '10000000-0000-0000-0000-000000000003');
+
+update public.exams set status = 'submitted' where id = '82000000-0000-0000-0000-000000000001';
+update public.exams set status = 'reviewed' where id = '82000000-0000-0000-0000-000000000001';
+update public.exams set status = 'published' where id = '82000000-0000-0000-0000-000000000001';
+
+alter table public.fee_invoices disable trigger fee_invoices_audit;
+alter table public.fee_payments disable trigger fee_payments_audit;
+alter table public.fee_invoice_items disable trigger fee_invoice_items_audit;
 
 insert into public.fee_structures (id, school_id, academic_session_id, class_id, fee_type, amount, frequency, due_day)
 values
@@ -222,6 +240,10 @@ values
 insert into public.fee_payments (school_id, invoice_id, payment_reference, amount, payment_method, payment_date, received_by, notes)
 values ('20000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000003', 'PAY-2026-0001', 10000, 'upi', current_date, '10000000-0000-0000-0000-000000000004', 'Advance payment received');
 
+alter table public.fee_invoices enable trigger fee_invoices_audit;
+alter table public.fee_payments enable trigger fee_payments_audit;
+alter table public.fee_invoice_items enable trigger fee_invoice_items_audit;
+
 insert into public.library_authors (id, school_id, name, bio)
 values ('a0000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Bapsi Sidhwa', 'Pakistani author featured in the school reading collection.');
 insert into public.library_categories (id, school_id, name) values ('a0000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'Children''s Literature');
@@ -231,7 +253,7 @@ values ('a0000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-0000000
 insert into public.library_book_copies (id, school_id, book_id, copy_number, status, condition_note)
 values
   ('a0000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'BB-001', 'available', 'Good condition'),
-  ('a0000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'BB-002', 'issued', 'Good condition');
+  ('a0000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000004', 'BB-002', 'available', 'Good condition');
 insert into public.library_members (id, school_id, member_type, profile_id, student_id, membership_number)
 values ('a0000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000001', 'student', '10000000-0000-0000-0000-000000000006', '70000000-0000-0000-0000-000000000001', 'LIB-0001');
 insert into public.library_transactions (school_id, copy_id, member_id, issued_on, due_date, status, notes)

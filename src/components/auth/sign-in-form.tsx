@@ -15,8 +15,8 @@ export function SignInForm({ nextPath, message, error }: { nextPath?: string; me
       {message && <p className="auth-success">{message}</p>}
       {error && <p className="auth-error">{error === "reset-link-invalid" ? "Reset link invalid ya expire ho chuka hai." : error}</p>}
       {state?.error && <p className="auth-error">{state.error}</p>}
-      <label htmlFor="email">Email<input id="email" name="email" type="email" autoComplete="email" required /></label>
-      {state?.fieldErrors?.email && <p className="field-error">{state.fieldErrors.email[0]}</p>}
+      <label htmlFor="login">Email, username ya User ID<input id="login" name="login" type="text" autoComplete="username" required /></label>
+      {state?.fieldErrors?.login && <p className="field-error">{state.fieldErrors.login[0]}</p>}
       <label htmlFor="password">Password<input id="password" name="password" type="password" autoComplete="current-password" required /></label>
       {state?.fieldErrors?.password && <p className="field-error">{state.fieldErrors.password[0]}</p>}
       <SubmitButton>Sign in</SubmitButton>
