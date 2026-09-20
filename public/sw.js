@@ -1,4 +1,4 @@
-const CACHE_NAME = "schooliva-shell-v1";
+const CACHE_NAME = "schooliva-shell-v2";
 const APP_SHELL = [
   "/",
   "/sign-in",

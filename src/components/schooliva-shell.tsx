@@ -4,7 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const navGroups = [
+import { GlobalSearchBar } from "@/components/search/global-search";
+import { LiveClock } from "@/components/dashboard/live-clock";
+
+export const navGroups = [
   {
     title: "Main",
     items: [
@@ -17,6 +20,7 @@ const navGroups = [
       { label: "Students", href: "/students", icon: "students" },
       { label: "Teachers", href: "/teachers", icon: "teachers" },
       { label: "Attendance", href: "/attendance", icon: "attendance" },
+      { label: "People attendance", href: "/people-attendance", icon: "attendance" },
       { label: "Timetable", href: "/timetable", icon: "timetable" },
       { label: "Exams", href: "/exams", icon: "exams" },
       { label: "Results", href: "/results", icon: "results" },
@@ -57,7 +61,7 @@ const navGroups = [
   },
 ] as const;
 
-function NavIcon({ name }: { name: string }) {
+export function NavIcon({ name }: { name: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
   switch (name) {
@@ -116,40 +120,40 @@ export function SchoolivaShell({
   description,
   breadcrumbs = [],
   actions,
+  hideSidebar = false,
+  headerVariant = "default",
+  userName = "Schooliva",
+  userRole = "Member",
+  unreadNotifications = 0,
   children,
 }: {
   title: string;
   description?: string;
   breadcrumbs?: Array<{ label: string; href?: string }>;
   actions?: React.ReactNode;
+  hideSidebar?: boolean;
+  headerVariant?: "default" | "dashboard";
+  userName?: string;
+  userRole?: string;
+  unreadNotifications?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [compact, setCompact] = useState(false);
-  const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const [todayLabel, setTodayLabel] = useState("");
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("schooliva-theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const theme = savedTheme === "dark" || (!savedTheme && prefersDark) ? "dark" : "light";
+    const syncDate = window.setTimeout(() => setTodayLabel(new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date())), 0);
 
-    document.documentElement.dataset.theme = theme;
-    const syncThemeState = window.setTimeout(() => setIsDarkTheme(theme === "dark"), 0);
-
-    return () => window.clearTimeout(syncThemeState);
+    return () => {
+      window.clearTimeout(syncDate);
+    };
   }, []);
-
-  const toggleTheme = () => {
-    const theme = isDarkTheme ? "light" : "dark";
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("schooliva-theme", theme);
-    setIsDarkTheme(theme === "dark");
-  };
 
   return (
     <div className={`schooliva-shell ${compact ? "is-compact" : ""}`}>
-      <aside className={`schooliva-sidebar ${compact ? "is-compact" : ""} ${sidebarOpen ? "is-open" : ""}`}>
+      {!hideSidebar && <aside className={`schooliva-sidebar ${compact ? "is-compact" : ""} ${sidebarOpen ? "is-open" : ""}`}>
         <div className="schooliva-sidebar__top">
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
             <span className="schooliva-brand__mark">S</span>
@@ -183,58 +187,54 @@ export function SchoolivaShell({
             </div>
           ))}
         </nav>
-      </aside>
+      </aside>}
 
       <div className="schooliva-shell__main">
-        <header className="schooliva-header">
+        <header className={`schooliva-header ${headerVariant === "dashboard" ? "schooliva-header--dashboard" : ""}`}>
           <div className="schooliva-header__left">
             <button type="button" className="schooliva-mobile-toggle" aria-label="Open navigation" onClick={() => setSidebarOpen((value) => !value)}>
               ☰
             </button>
-            <nav aria-label="Breadcrumb" className="schooliva-breadcrumbs">
+            <div className="schooliva-header__context">
+              {headerVariant === "dashboard" && <span className="schooliva-header__status"><i /> Live workspace</span>}
+              <nav aria-label="Breadcrumb" className="schooliva-breadcrumbs">
               {breadcrumbs.length ? breadcrumbs.map((crumb, index) => (
                 <span key={`${crumb.label}-${index}`} className="schooliva-breadcrumb">
                   {crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : <span>{crumb.label}</span>}
                   {index < breadcrumbs.length - 1 && <span className="schooliva-breadcrumb__sep">/</span>}
                 </span>
               )) : <span className="schooliva-breadcrumb schooliva-breadcrumb--current">{title}</span>}
-            </nav>
+              </nav>
+            </div>
           </div>
 
           <div className="schooliva-header__right">
-            <label className="schooliva-search" aria-label="Global search">
-              <span>⌕</span>
-              <input type="search" placeholder="Search" aria-label="Search Schooliva" />
-            </label>
-            <button type="button" className="schooliva-icon-button" aria-label="Notifications">🔔</button>
-            <button
-              type="button"
-              className="schooliva-icon-button"
-              aria-label={isDarkTheme ? "Switch to light theme" : "Switch to dark theme"}
-              aria-pressed={isDarkTheme}
-              onClick={toggleTheme}
-              title={isDarkTheme ? "Switch to light theme" : "Switch to dark theme"}
-            >
-              {isDarkTheme ? "☀" : "☾"}
-            </button>
+            {headerVariant === "dashboard" && <LiveClock />}
+            {headerVariant === "dashboard" && todayLabel && <span className="schooliva-header__date">Today / {todayLabel}</span>}
+            {headerVariant === "dashboard" && actions && <div className="schooliva-header__actions">{actions}</div>}
+            <GlobalSearchBar compact />
+            <Link href="/notifications" className="schooliva-icon-button schooliva-notification-button" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ""}`}>
+              <span aria-hidden="true">&#9673;</span>
+              {unreadNotifications > 0 && <b>{unreadNotifications > 9 ? "9+" : unreadNotifications}</b>}
+            </Link>
             <Link href="/profile" className="schooliva-user" aria-label="View profile">
-              <span className="schooliva-user__avatar">S</span>
+              <span className="schooliva-user__avatar"><img src="/brand/logo.png" alt="" /></span>
               <span className="schooliva-user__meta">
-                <strong>Schooliva</strong>
-                <small>Admin</small>
+                <strong>{userName}</strong>
+                <small>{userRole}</small>
               </span>
             </Link>
           </div>
         </header>
 
         <main className="schooliva-content">
-          <header className="page-header">
+          <header className={`page-header ${headerVariant === "dashboard" ? "page-header--dashboard" : ""}`}>
             <div>
               <p className="page-header__eyebrow">Schooliva</p>
               <h1>{title}</h1>
               {description && <p className="page-header__description">{description}</p>}
             </div>
-            {actions && <div className="page-header__actions">{actions}</div>}
+            {headerVariant !== "dashboard" && actions && <div className="page-header__actions">{actions}</div>}
           </header>
 
           {children}

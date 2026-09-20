@@ -12,7 +12,7 @@ export function RegisterPwa() {
     if (!("serviceWorker" in navigator)) return;
 
     navigator.serviceWorker
-      .register("/sw.js")
+      .register("/sw.js?v=2")
       .catch((error) => console.error("PWA service worker registration failed:", error));
 
     const handleBeforeInstallPrompt = (event: Event) => {

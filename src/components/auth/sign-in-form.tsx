@@ -21,6 +21,7 @@ export function SignInForm({ nextPath, message, error }: { nextPath?: string; me
       {state?.fieldErrors?.password && <p className="field-error">{state.fieldErrors.password[0]}</p>}
       <SubmitButton>Sign in</SubmitButton>
       <Link className="auth-link" href="/forgot-password">Password bhool gaye?</Link>
+      <Link className="auth-link" href="/ahmedadmin">Create a principal account</Link>
     </form>
   );
 }

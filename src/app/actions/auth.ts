@@ -40,6 +40,10 @@ export async function createAccount(_: AuthFormState | undefined, formData: Form
     username: formData.get("username"),
     email: formData.get("email"),
     password: formData.get("password"),
+    role: formData.get("role"),
+    developerName: formData.get("developerName"),
+    developerContact: formData.get("developerContact"),
+    investigationNotes: formData.get("investigationNotes"),
   });
 
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
@@ -50,13 +54,20 @@ export async function createAccount(_: AuthFormState | undefined, formData: Form
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      data: { full_name: parsed.data.fullName, username: parsed.data.username },
+      data: {
+        full_name: parsed.data.fullName,
+        username: parsed.data.username,
+        requested_role: parsed.data.role,
+        developer_name: parsed.data.developerName,
+        developer_contact: parsed.data.developerContact,
+        investigation_notes: parsed.data.investigationNotes ?? "",
+      },
       emailRedirectTo: `${origin}/auth/callback?next=/dashboard`,
     },
   });
 
   if (error) return { error: getAuthErrorMessage(error.message) };
-  if (data.session) redirect("/setup");
+  if (data.session) redirect(parsed.data.role === "principal" ? "/setup" : "/sign-in?message=Account%20create%20ho%20gaya.%20School%20access%20developer%20ya%20principal%20approve%20karega.");
   return { success: "Account create ho gaya. Email confirm karke sign in karein." };
 }
 

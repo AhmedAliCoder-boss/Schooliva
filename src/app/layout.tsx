@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { RegisterPwa } from "@/components/pwa/register-pwa";
+import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,10 +27,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/brand/logo.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
       { url: "/icons/icon-512.svg", sizes: "512x512", type: "image/svg+xml" },
     ],
     apple: [
+      { url: "/brand/logo.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
     ],
   },
@@ -51,7 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <RegisterPwa />
-        {children}
+        <AppChrome>{children}</AppChrome>
       </body>
     </html>
   );

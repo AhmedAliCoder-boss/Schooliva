@@ -31,7 +31,7 @@ export function SchoolProfileForm({ school }: { school: Record<string, string | 
 export function SettingsForm({ settings }: { settings: Record<string, string | null> }) {
   const [state, action] = useActionState(updateSettings, undefined);
   const { timeZones, currencies, dateFormats } = useIntlOptions();
-  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><SearchableOption label="Timezone" name="timezone" defaultValue={settings.timezone ?? "UTC"} options={timeZones} placeholder="Search timezone..." /><SearchableOption label="Currency" name="currency" defaultValue={settings.currency_code ?? "USD"} options={currencies} placeholder="Search currency..." /><SearchableOption label="Date format" name="dateFormat" defaultValue={settings.date_format ?? "YYYY-MM-DD"} options={dateFormats} placeholder="Search date format..." /></div><SubmitButton>Save settings</SubmitButton></form>;
+  return <form action={action} className="setup-form"><Feedback state={state} /><div className="form-grid"><SearchableOption label="Timezone" name="timezone" defaultValue={settings.timezone ?? "UTC"} options={timeZones} placeholder="Search timezone..." /><SearchableOption label="Currency" name="currency" defaultValue={settings.currency_code ?? "PKR"} options={currencies} placeholder="Search currency..." /><SearchableOption label="Date format" name="dateFormat" defaultValue={settings.date_format ?? "YYYY-MM-DD"} options={dateFormats} placeholder="Search date format..." /></div><SubmitButton>Save settings</SubmitButton></form>;
 }
 
 export function SessionForm({ initial }: { initial?: Record<string, string> }) {

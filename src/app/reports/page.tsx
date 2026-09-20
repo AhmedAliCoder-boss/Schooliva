@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatCurrency } from "@/lib/format/currency";
 
 export default async function ReportsPage() {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export default async function ReportsPage() {
   return <main className="students-shell"><header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header><section className="module-page-header"><div className="module-page-header__row"><div><p className="module-page-header__eyebrow">Reports</p><h1>School reports and exports.</h1><p>Server-side summaries tuned for student, attendance, fee, results, teacher, library, transport, and inventory reporting.</p></div></div></section><section className="module-kpi-grid">{[
     ["Students", payload.student_summary?.total_students ?? 0],
     ["Attendance", `${payload.attendance_summary?.present_rate ?? 0}%`],
-    ["Fee collected", payload.fee_summary?.total_collected ?? 0],
+    ["Fee collected", formatCurrency(payload.fee_summary?.total_collected)],
     ["Published exams", payload.result_summary?.published_exams ?? 0],
     ["Teachers", payload.teacher_summary?.active_teachers ?? 0],
     ["Library", payload.library_summary?.books_total ?? 0],
