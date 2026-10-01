@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 
+import { canManageUserAccounts, getCurrentUser } from "@/lib/auth/authorization";
 import { getAuthErrorMessage } from "@/lib/auth/messages";
+import { isMasterAdminUser } from "@/lib/auth/roles";
 import { createAccountSchema, forgotPasswordSchema, resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { getSafeSiteOrigin, isSafeRelativePath } from "@/lib/security/validation";
@@ -28,13 +30,25 @@ export async function signIn(_: AuthFormState | undefined, formData: FormData): 
     : await supabase.rpc("resolve_login_email", { login_identifier: identifier });
   if (lookupError || !resolvedEmail) return { error: "Email, username ya User ID incorrect hai." };
 
-  const { error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password: parsed.data.password });
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password: parsed.data.password });
   if (error) return { error: getAuthErrorMessage(error.message) };
 
-  redirect(getSafeNextPath(formData.get("next")));
+  const requestedNextPath = formData.get("next");
+  if (!requestedNextPath && signInData.user && await isMasterAdminUser(supabase, signInData.user.id)) {
+    redirect("/admin");
+  }
+
+  redirect(getSafeNextPath(requestedNextPath));
 }
 
 export async function createAccount(_: AuthFormState | undefined, formData: FormData): Promise<AuthFormState> {
+  const current = await getCurrentUser();
+  if (!current) return { error: "Only an authenticated admin can create user IDs or accounts." };
+
+  if (!(await canManageUserAccounts())) {
+    return { error: "Only an admin can create user IDs or accounts." };
+  }
+
   const parsed = createAccountSchema.safeParse({
     fullName: formData.get("fullName"),
     username: formData.get("username"),

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 
 import { BootstrapSchoolForm, AssignmentForm, ClassForm, DeleteRecordForm, SchoolProfileForm, SectionForm, SessionForm, SettingsForm, SubjectForm, TermForm } from "@/components/setup/setup-forms";
 import { requireUser } from "@/lib/auth/authorization";
 import { requireSetupContext } from "@/lib/setup/context";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 type SearchParams = Promise<{ section?: string; search?: string; page?: string; edit?: string; onboarding?: string }>;
 const sections = [
@@ -25,9 +27,12 @@ function Pagination({ section, search, page, hasNext }: { section: string; searc
 export default async function SetupPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const current = await requireUser();
-  const { data: membership } = await current.supabase.from("user_roles").select("school_id").eq("user_id", current.user.id).limit(1).maybeSingle();
+  const activeSchool = await getActiveSchoolContext(current.supabase, current.user.id);
 
-  if (!membership?.school_id) return <main className="setup-onboarding"><div className="setup-onboarding-inner"><Link href="/" aria-label="Schooliva home"><Image className="setup-logo" src="/brand/logo.png" alt="Schooliva" width={240} height={240} priority /></Link><p className="eyebrow">School setup</p><h1>Set up your school.</h1><p className="setup-lede">Create the school workspace that will hold your academic structure and future operations.</p><BootstrapSchoolForm /></div></main>;
+  if (!activeSchool.schoolId) {
+    if (activeSchool.isMasterAdmin) redirect("/admin");
+    return <main className="setup-onboarding"><div className="setup-onboarding-inner"><Link href="/" aria-label="Schooliva home"><Image className="setup-logo" src="/brand/logo.png" alt="Schooliva" width={240} height={240} priority /></Link><p className="eyebrow">School setup</p><h1>Set up your school.</h1><p className="setup-lede">Create the school workspace that will hold your academic structure and future operations.</p><BootstrapSchoolForm /></div></main>;
+  }
 
   const { supabase, schoolId } = await requireSetupContext();
   const section = sections.some(([key]) => key === params.section) ? params.section! : "school";

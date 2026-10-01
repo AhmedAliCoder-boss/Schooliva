@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { signOut } from "@/app/actions/auth";
+import { exitSchoolWorkspace, selectSchoolWorkspace } from "@/app/actions/admin";
 import { LiveGreeting } from "@/components/dashboard/live-greeting";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
+import { buildBrandingTheme } from "@/lib/school-branding";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/format/currency";
 import { SchoolivaShell } from "@/components/schooliva-shell";
@@ -12,15 +15,47 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
 
+  const activeSchoolContext = await getActiveSchoolContext(supabase, user.id);
+  if (activeSchoolContext.isMasterAdmin && !activeSchoolContext.schoolId) redirect("/admin");
   const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
-  const { data: membership } = await supabase.from("user_roles").select("school_id, roles(name), schools(name)").eq("user_id", user.id).limit(1).maybeSingle();
-  const school = Array.isArray(membership?.schools) ? membership.schools[0] : membership?.schools;
-  const role = Array.isArray(membership?.roles) ? membership.roles[0] : membership?.roles;
-  const { data: summary } = membership?.school_id ? await supabase.rpc("dashboard_summary", { target_school_id: membership.school_id }) : { data: null };
-  const { data: trendData } = membership?.school_id ? await supabase.rpc("dashboard_trends", { target_school_id: membership.school_id }) : { data: null };
+  const { data: memberships } = await supabase.from("user_roles").select("school_id, roles(name), schools(name)").eq("user_id", user.id).order("school_id", { ascending: true });
+  const { data: membership } = activeSchoolContext.schoolId
+    ? await supabase.from("user_roles").select("school_id, roles(name), schools(name)").eq("user_id", user.id).eq("school_id", activeSchoolContext.schoolId).limit(1).maybeSingle()
+    : { data: null };
+  const { data: selectedSchool } = activeSchoolContext.isMasterAdmin && activeSchoolContext.schoolId
+    ? await supabase.from("schools").select("id,name").eq("id", activeSchoolContext.schoolId).maybeSingle()
+    : { data: null };
+  const schoolRecord = Array.isArray(membership?.schools) ? membership.schools[0] : membership?.schools;
+  const school = schoolRecord && typeof schoolRecord === "object" && "name" in schoolRecord ? schoolRecord as { name?: string | null } : null;
+  const roleRecord = Array.isArray(membership?.roles) ? membership.roles[0] : membership?.roles;
+  const role = roleRecord && typeof roleRecord === "object" && "name" in roleRecord ? roleRecord as { name?: string | null } : null;
+  const schoolOptions = (memberships ?? []).map((row) => {
+    const record = Array.isArray(row.schools) ? row.schools[0] : row.schools;
+    const name = record && typeof record === "object" && "name" in record ? String((record as { name?: string | null }).name ?? "School") : "School";
+    return { id: String(row.school_id), name };
+  });
+  const schoolId = activeSchoolContext.schoolId;
+  const { data: summary } = schoolId ? await supabase.rpc("dashboard_summary", { target_school_id: schoolId }) : { data: null };
+  const { data: trendData } = schoolId ? await supabase.rpc("dashboard_trends", { target_school_id: schoolId }) : { data: null };
+  const { data: brandingRecord } = schoolId ? await supabase.from("school_branding").select("primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode").eq("school_id", schoolId).maybeSingle() : { data: null };
+  const brandingTheme = brandingRecord ? buildBrandingTheme({
+    primaryColor: brandingRecord.primary_color,
+    secondaryColor: brandingRecord.secondary_color,
+    accentColor: brandingRecord.accent_color,
+    backgroundColor: brandingRecord.background_color,
+    foregroundColor: brandingRecord.foreground_color,
+    cardColor: brandingRecord.card_color,
+    mutedColor: brandingRecord.muted_color,
+    borderColor: brandingRecord.border_color,
+    successColor: brandingRecord.success_color,
+    warningColor: brandingRecord.warning_color,
+    destructiveColor: brandingRecord.destructive_color,
+    infoColor: brandingRecord.info_color,
+    themeMode: brandingRecord.theme_mode,
+  }) : undefined;
   const metrics = (summary ?? {}) as Record<string, unknown>;
   const trends = (trendData ?? {}) as { attendance?: Array<{ date: string; value: number }>; payments?: Array<{ date: string; value: number }>; schools_count?: number };
-  const roleSlug = String(metrics.role ?? role?.name ?? "member").toLowerCase().replaceAll(" ", "_");
+  const roleSlug = activeSchoolContext.isMasterAdmin ? "super_admin" : String(metrics.role ?? role?.name ?? "member").toLowerCase().replaceAll(" ", "_");
   const metricCards = roleSlug === "accountant" ? [
     ["Collection today", metrics.collection_today ?? 0, "finance"],
     ["Outstanding fees", formatCurrency(metrics.outstanding_fees), "finance"],
@@ -75,10 +110,26 @@ export default async function DashboardPage() {
       userName={profile?.full_name ?? user.email ?? "Schooliva user"}
       userRole={roleLabel}
       unreadNotifications={Number(metrics.unread_notifications ?? 0)}
+      schoolContext={activeSchoolContext.isMasterAdmin ? selectedSchool?.name ?? activeSchoolContext.schoolName ?? "Selected school" : undefined}
+      schoolContextAction={activeSchoolContext.isMasterAdmin ? <form action={exitSchoolWorkspace}><button className="sign-out" type="submit">Return to platform</button></form> : undefined}
+      brandingTheme={brandingTheme}
     >
-      <section className="dashboard-welcome"><div><p className="dashboard-kicker">{school?.name ?? "School workspace"} / {roleLabel}</p><LiveGreeting firstName={firstName} /><p>One clear view of the people, learning, and operations moving through your school today.</p></div><div className="dashboard-actions"><Link href="/reports" className="dashboard-action dashboard-action--primary">View reports <span>-&gt;</span></Link><Link href="/search" className="dashboard-action">Search records <span>&#9906;</span></Link></div></section>
-      {membership && school ? <section className="dashboard-workspace-bar"><div><span>Active workspace</span><strong>{school.name}</strong><small>{roleLabel} access / Updated just now</small></div><span className="dashboard-status"><i /> Systems operational</span></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
-      {membership?.school_id && <>
+      <section className="dashboard-welcome"><div><p className="dashboard-kicker">{selectedSchool?.name ?? school?.name ?? "School workspace"} / {roleLabel}</p><LiveGreeting firstName={firstName} /><p>One clear view of the people, learning, and operations moving through your school today.</p></div><div className="dashboard-actions"><Link href="/reports" className="dashboard-action dashboard-action--primary">View reports <span>-&gt;</span></Link><Link href="/search" className="dashboard-action">Search records <span>&#9906;</span></Link></div></section>
+      {schoolId && (selectedSchool || (membership && school)) ? <section className="dashboard-workspace-bar"><div><span>Active workspace</span><strong>{selectedSchool?.name ?? school?.name}</strong><small>{roleLabel} access / Updated just now</small></div><span className="dashboard-status"><i /> Systems operational</span></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
+      {!activeSchoolContext.isMasterAdmin && schoolOptions.length > 1 && (
+        <section className="dashboard-panel" style={{ marginTop: 16 }}>
+          <div className="dashboard-card-heading">
+            <div><span className="dashboard-panel-kicker">Workspace selector</span><h2>Choose school context</h2></div>
+          </div>
+          <form action={selectSchoolWorkspace} style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12 }}>
+            <select name="schoolId" defaultValue={schoolId ?? schoolOptions[0]?.id}>
+              {schoolOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+            <button type="submit" className="dashboard-action dashboard-action--primary">Use this school</button>
+          </form>
+        </section>
+      )}
+      {schoolId && <>
         <section className="dashboard-metrics" aria-label="Dashboard summary">{metricCards.map(([label, value, href]) => <Link className="dashboard-metric-card" href={`/${href}`} key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong><small>View details <em>-&gt;</em></small></Link>)}</section>
         <section className="dashboard-content-grid">
           <article className="dashboard-panel dashboard-panel--attendance"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Attendance overview</span><h2>Daily presence, last 7 days</h2></div><Link href="/attendance">Open attendance -&gt;</Link></div><div className="dashboard-chart"><div className="dashboard-chart__scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><svg viewBox="0 0 620 190" role="img" aria-label="Attendance trend for the last seven days"><path className="dashboard-chart__grid" d="M0 10H620M0 48H620M0 86H620M0 124H620M0 180H620" />{attendance.length > 1 && <><polyline className="dashboard-chart__area" points={`0,190 ${attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} 620,190`} /><polyline className="dashboard-chart__line" points={attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} />{attendance.map((item, index) => { const [x, y] = pointFor(Number(item.value), index, attendance).split(","); return <circle className="dashboard-chart__point" cx={x} cy={y} r="4" key={item.date} />; })}</>}</svg><div className="dashboard-chart__labels">{attendance.map((item) => <span key={item.date}>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(item.date))}</span>)}</div></div><div className="dashboard-insight"><span className="dashboard-insight__signal">&#8599;</span><span>30-day attendance is <strong>{String(metrics.attendance_percentage ?? 0)}%</strong>.</span></div></article>

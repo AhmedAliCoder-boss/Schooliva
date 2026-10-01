@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AssignmentForm } from "@/components/assignments/assignment-forms";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
 
@@ -9,9 +10,8 @@ export default async function AssignmentsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) redirect("/setup?onboarding=1");
-  const schoolId = membership.school_id as string;
+  const { schoolId, isMasterAdmin } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
 
   const [{ data: sessions }, { data: classes }, { data: sections }, { data: subjects }, { data: assignments }] = await Promise.all([
     supabase.from("academic_sessions").select("id,name").eq("school_id", schoolId).order("starts_on", { ascending: false }),

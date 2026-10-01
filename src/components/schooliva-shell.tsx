@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { GlobalSearchBar } from "@/components/search/global-search";
 import { LiveClock } from "@/components/dashboard/live-clock";
+import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
 
 export const navGroups = [
   {
@@ -59,7 +60,7 @@ export const navGroups = [
       { label: "Audit Logs", href: "/audit", icon: "audit" },
     ],
   },
-] as const;
+];
 
 export function NavIcon({ name }: { name: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -125,6 +126,10 @@ export function SchoolivaShell({
   userName = "Schooliva",
   userRole = "Member",
   unreadNotifications = 0,
+  showMasterAdminNav = false,
+  schoolContext,
+  schoolContextAction,
+  brandingTheme,
   children,
 }: {
   title: string;
@@ -136,6 +141,10 @@ export function SchoolivaShell({
   userName?: string;
   userRole?: string;
   unreadNotifications?: number;
+  showMasterAdminNav?: boolean;
+  schoolContext?: string;
+  schoolContextAction?: React.ReactNode;
+  brandingTheme?: BrandingTheme;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -151,8 +160,21 @@ export function SchoolivaShell({
     };
   }, []);
 
+  const navGroupsWithAdmin = [...navGroups] as Array<{ title: string; items: Array<{ label: string; href: string; icon: string }> }>;
+  if (showMasterAdminNav) {
+    navGroupsWithAdmin.push({
+      title: "MASTER ADMIN",
+      items: [
+        { label: "Admin Overview", href: "/admin", icon: "settings" },
+        { label: "Manage Schools & Accounts", href: "/admin/schools", icon: "users" },
+      ],
+    } as const);
+  }
+
+  const shellStyle = brandingTheme ? buildBrandingCssVars(brandingTheme) : undefined;
+
   return (
-    <div className={`schooliva-shell ${compact ? "is-compact" : ""}`}>
+    <div className={`schooliva-shell ${compact ? "is-compact" : ""}`} style={shellStyle}>
       {!hideSidebar && <aside className={`schooliva-sidebar ${compact ? "is-compact" : ""} ${sidebarOpen ? "is-open" : ""}`}>
         <div className="schooliva-sidebar__top">
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
@@ -172,7 +194,7 @@ export function SchoolivaShell({
         </div>
 
         <nav className="schooliva-nav" aria-label="Main navigation">
-          {navGroups.map((group) => (
+          {navGroupsWithAdmin.map((group) => (
             <div key={group.title} className="schooliva-nav__group">
               <p className="schooliva-nav__label">{group.title}</p>
               {group.items.map((item) => {
@@ -212,6 +234,8 @@ export function SchoolivaShell({
             {headerVariant === "dashboard" && <LiveClock />}
             {headerVariant === "dashboard" && todayLabel && <span className="schooliva-header__date">Today / {todayLabel}</span>}
             {headerVariant === "dashboard" && actions && <div className="schooliva-header__actions">{actions}</div>}
+            {schoolContext && <span className="schooliva-school-context">Viewing School: <strong>{schoolContext}</strong></span>}
+            {schoolContextAction}
             <GlobalSearchBar compact />
             <Link href="/notifications" className="schooliva-icon-button schooliva-notification-button" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ""}`}>
               <span aria-hidden="true">&#9673;</span>

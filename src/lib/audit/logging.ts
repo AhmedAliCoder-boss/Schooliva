@@ -1,0 +1,51 @@
+export type AuditLogPayload = {
+  target_school_id: string;
+  target_action: string;
+  target_entity_type: string;
+  target_entity_id?: string | null;
+  target_metadata: Record<string, unknown>;
+  target_actor_id?: string | null;
+};
+
+export function buildAuditLogPayload({
+  schoolId,
+  action,
+  entityType,
+  entityId,
+  metadata,
+  actorId,
+}: {
+  schoolId: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  actorId?: string | null;
+}): AuditLogPayload {
+  const normalizedMetadata = metadata && typeof metadata === "object" ? metadata : {};
+
+  return {
+    target_school_id: schoolId,
+    target_action: String(action).trim() || "update",
+    target_entity_type: String(entityType).trim() || "record",
+    target_entity_id: entityId ?? null,
+    target_metadata: normalizedMetadata,
+    target_actor_id: actorId ?? null,
+  };
+}
+
+export async function recordAuditEvent(
+  supabase: any,
+  input: {
+    schoolId: string;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    metadata?: Record<string, unknown> | null;
+    actorId?: string | null;
+  }
+) {
+  const payload = buildAuditLogPayload(input);
+  const { data, error } = await supabase.rpc("write_audit_log", payload);
+  return { data, error };
+}

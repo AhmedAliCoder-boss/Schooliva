@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
 
@@ -8,9 +9,8 @@ export default async function ResultsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) redirect("/setup?onboarding=1");
-  const schoolId = membership.school_id as string;
+  const { schoolId, isMasterAdmin } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
 
   const { data: exams } = await supabase.from("exams").select("id,name,status,starts_on,ends_on,academic_sessions(name)").eq("school_id", schoolId).eq("status", "published").order("starts_on", { ascending: false });
   const rows = exams ?? [];

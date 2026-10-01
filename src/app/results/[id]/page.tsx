@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReportCardPrintButton } from "@/components/results/report-card-print-button";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
 
@@ -10,9 +11,8 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ i
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return notFound();
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) return notFound();
-  const schoolId = membership.school_id as string;
+  const { schoolId } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) return notFound();
   const { data: exam } = await supabase.from("exams").select("id,name,starts_on,ends_on,status,academic_sessions(name),schools(name),grading_scales(name)").eq("id", id).eq("school_id", schoolId).eq("status", "published").maybeSingle();
   if (!exam) return notFound();
   const examRecord = exam as Record<string, unknown>;

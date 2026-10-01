@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { NavIcon, navGroups } from "@/components/schooliva-shell";
 
-const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/reset-password"];
+const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/reset-password", "/admin"];
 
 function isExcluded(pathname: string) {
   return excludedPrefixes.some((prefix) => prefix === "/" ? pathname === "/" : pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -31,7 +31,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(closeTimer);
   }, [pathname]);
 
-  if (!mounted || isExcluded(pathname) || pathname === "/dashboard") return children;
+  if (pathname.startsWith("/admin") || !mounted || isExcluded(pathname) || pathname === "/dashboard") return children;
 
   return (
     <div className="app-chrome">

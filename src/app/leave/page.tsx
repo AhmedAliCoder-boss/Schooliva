@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LeaveDecisionForm, LeaveRequestForm, LeaveTypeForm } from "@/components/leave/leave-forms";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 export default async function LeavePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) redirect("/setup?onboarding=1");
-  const schoolId = membership.school_id as string;
+  const { schoolId, isMasterAdmin } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
   const [{ data: types }, { data: requests }, { data: students }, { data: teachers }, { data: staff }] = await Promise.all([
     supabase.from("leave_types").select("id,name").eq("school_id", schoolId).eq("is_active", true).order("name"),
     supabase.from("leave_requests").select("id,status,start_date,end_date,reason,student_id,teacher_id,staff_id,leave_types(name)").eq("school_id", schoolId).order("created_at", { ascending: false }),

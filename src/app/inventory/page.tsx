@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CategoryForm, ItemForm, StockTransactionForm, SupplierForm, UnitForm } from "@/components/inventory/inventory-forms";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 export default async function InventoryPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) redirect("/setup?onboarding=1");
-  const schoolId = membership.school_id as string;
+  const { schoolId, isMasterAdmin } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
 
   const [{ data: categories }, { data: units }, { data: suppliers }, { data: items }, { data: transactions }] = await Promise.all([
     supabase.from("inventory_categories").select("id,name").eq("school_id", schoolId).order("name"),

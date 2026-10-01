@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CertificateForm } from "@/components/documents/certificate-forms";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 export default async function DocumentsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
-  const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).limit(1).maybeSingle();
-  if (!membership?.school_id) redirect("/setup?onboarding=1");
-  const schoolId = membership.school_id as string;
+  const { schoolId, isMasterAdmin } = await getActiveSchoolContext(supabase, user.id);
+  if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
   const [{ data: students }, { data: certificates }, { data: schoolDocuments }] = await Promise.all([
     supabase.from("students").select("id,first_name,last_name,admission_number").eq("school_id", schoolId).eq("is_active", true).order("last_name"),
     supabase.from("certificate_records").select("id,certificate_type,certificate_number,issued_on,status,student_id,students(first_name,last_name,admission_number)").eq("school_id", schoolId).order("issued_on", { ascending: false }),
