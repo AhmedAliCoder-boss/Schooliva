@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/format/currency";
 import { FeeStructureForm, InvoiceForm, PaymentForm } from "@/components/finance/finance-forms";
+import { ProgressWheel } from "@/components/progress-wheel";
 import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
@@ -32,10 +33,12 @@ export default async function FinancePage() {
   const totalOutstanding = financeInvoices.reduce((sum, invoice) => sum + Number(invoice.remaining_amount ?? 0), 0);
   const paidCount = financeInvoices.filter((invoice) => String(invoice.status).toLowerCase() === "paid").length;
   const overdueCount = financeInvoices.filter((invoice) => String(invoice.status).toLowerCase() === "overdue").length;
+  const invoiceCount = financeInvoices.length;
+  const percent = (value: number) => invoiceCount ? Math.round(value / invoiceCount * 100) : 0;
   return <main className="students-shell">
     <header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header>
     <section className="module-page-header"><div className="module-page-header__row"><div><p className="module-page-header__eyebrow">Finance</p><h1>Fee and finance.</h1><p>Transaction-safe fee structures, invoices, payments, and collection dashboards.</p></div></div></section>
-    <section className="module-kpi-grid"><article className="module-kpi"><span>Total collected</span><strong>{formatCurrency(totalCollected)}</strong></article><article className="module-kpi"><span>Outstanding</span><strong>{formatCurrency(totalOutstanding)}</strong></article><article className="module-kpi"><span>Paid invoices</span><strong>{paidCount}</strong></article><article className="module-kpi"><span>Overdue</span><strong>{overdueCount}</strong></article></section>
+    <section className="module-kpi-grid" aria-label="Finance summary"><article className="module-kpi"><span>Total collected</span><strong>{formatCurrency(totalCollected)}</strong></article><article className="module-kpi"><span>Outstanding</span><strong>{formatCurrency(totalOutstanding)}</strong></article><ProgressWheel label="Paid invoices" value={paidCount} percentage={percent(paidCount)} color="#047857" detail={`${paidCount} of ${invoiceCount} invoices`} /><ProgressWheel label="Overdue" value={overdueCount} percentage={percent(overdueCount)} color="#be123c" detail={`${overdueCount} of ${invoiceCount} invoices`} /></section>
     <section className="setup-card"><h3>Fee structure</h3><FeeStructureForm sessions={sessions ?? []} classes={classes ?? []} /></section>
     <section className="setup-card"><h3>Generate invoice</h3><InvoiceForm sessions={sessions ?? []} students={studentOptions} feeStructures={feeStructureOptions} /></section>
     <section className="setup-card"><h3>Record payment</h3><PaymentForm invoices={invoiceOptions} /></section>

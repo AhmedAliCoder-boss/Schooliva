@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { signOut } from "@/app/actions/auth";
 import { GlobalSearchBar } from "@/components/search/global-search";
 import { LiveClock } from "@/components/dashboard/live-clock";
 import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
@@ -59,8 +60,13 @@ export const navGroups = [
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Settings", href: "/setup", icon: "settings" },
       { label: "Users & Roles", href: "/staff", icon: "users" },
+      { label: "User accounts", href: "/users", icon: "users" },
       { label: "Audit Logs", href: "/audit", icon: "audit" },
     ],
+  },
+  {
+    title: "Account",
+    items: [{ label: "My profile", href: "/profile", icon: "profile" }],
   },
 ];
 
@@ -110,6 +116,8 @@ export function NavIcon({ name }: { name: string }) {
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 8c.8-2.3 3.1-3.7 6-3.7s5.2 1.4 6 3.7M17 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm3 10c-.4-1.6-2-2.9-4.5-3.5" /></svg>;
     case "audit":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M7 4.5h10l3 3V18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Zm8 0v3h3m-9 9h8M8 15h8" /></svg>;
+    case "profile":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="8" r="3.5" /><path {...common} d="M5 20c.5-3.4 3.2-5.5 7-5.5s6.5 2.1 7 5.5" /></svg>;
     default:
       return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="12" r="8" /></svg>;
   }
@@ -129,6 +137,7 @@ export function SchoolivaShell({
   headerVariant = "default",
   userName = "Schooliva",
   userRole = "Member",
+  userAvatarUrl,
   unreadNotifications = 0,
   showMasterAdminNav = false,
   schoolContext,
@@ -145,6 +154,7 @@ export function SchoolivaShell({
   headerVariant?: "default" | "dashboard";
   userName?: string;
   userRole?: string;
+  userAvatarUrl?: string | null;
   unreadNotifications?: number;
   showMasterAdminNav?: boolean;
   schoolContext?: string;
@@ -216,6 +226,9 @@ export function SchoolivaShell({
             </div>
           ))}
         </nav>
+        <form action={signOut} className="schooliva-sidebar__sign-out">
+          <button type="submit"><span aria-hidden="true">↪</span><span>Sign out</span></button>
+        </form>
       </aside>}
 
       <div className="schooliva-shell__main">
@@ -249,7 +262,9 @@ export function SchoolivaShell({
               {unreadNotifications > 0 && <b>{unreadNotifications > 9 ? "9+" : unreadNotifications}</b>}
             </Link>
             <Link href="/profile" className="schooliva-user" aria-label="View profile">
-              <span className="schooliva-user__avatar"><Image src="/brand/landscape_logo.png" alt="" width={28} height={28} /></span>
+              <span className="schooliva-user__avatar">{userAvatarUrl
+                ? <Image src={userAvatarUrl} alt="" width={34} height={34} unoptimized />
+                : <span aria-hidden="true">{userName.trim().charAt(0).toUpperCase() || "S"}</span>}</span>
               <span className="schooliva-user__meta">
                 <strong>{userName}</strong>
                 <small>{userRole}</small>

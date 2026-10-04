@@ -16,10 +16,6 @@ export const createAccountSchema = z.object({
   investigationNotes: z.string().trim().max(1000, "Investigation notes 1000 characters se zyada nahi ho sakte.").optional(),
 });
 
-export const forgotPasswordSchema = z.object({
-  email: z.string().trim().email("Valid email enter karein."),
-});
-
 export const resetPasswordSchema = z.object({
   password: z.string().min(8, "Password kam se kam 8 characters ka hona chahiye."),
   confirmPassword: z.string().min(1, "Password confirm karein."),

@@ -1,4 +1,6 @@
 import { cancelSchoolContract, createPlatformBill, createPlatformContract, createSchoolTrial, pauseSchoolContract, recordPlatformTransaction, reconcilePlatformBills, renewSchoolContract } from "@/app/actions/admin";
+import { setSchoolUserPassword, updateSchoolUserProfile } from "@/app/actions/user-management";
+import { AccountEditPanel } from "@/components/admin/account-edit-panel";
 import { AdminShell, AdminUnavailable } from "@/components/admin/admin-shell";
 import { filterCustomerSchoolRows } from "@/lib/admin/customer-schools";
 import { requireMasterAdmin } from "@/lib/admin/guard";
@@ -10,14 +12,102 @@ import { formatStorageBytes, getStorageQuotaStatus } from "@/lib/storage/quota";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
 
-async function AccountsPage() {
+async function AccountsPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string; warning?: string }> }) {
   const { supabase } = await requireMasterAdmin();
-  const [{ data: memberships }, { data: profiles }] = await Promise.all([
-    supabase.from("user_roles").select("user_id,school_id,created_at,roles(name,slug),schools(name)"),
-    supabase.from("profiles").select("id,full_name,email,is_active,created_at"),
+  const [{ data: memberships, error: membershipsError }, { data: profiles, error: profilesError }, { data: roles, error: rolesError }] = await Promise.all([
+    supabase.from("user_roles").select("user_id,school_id,role_id,created_at,roles(name,slug),schools(name)").order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id,full_name,username,phone,email,is_active,created_at"),
+    supabase.from("roles").select("id,school_id,name,slug").order("name"),
   ]);
+  if (membershipsError || profilesError || rolesError) {
+    return <AdminShell title="Accounts" description="Account management is temporarily unavailable. Please try again." breadcrumbs={[{ label: "Accounts" }]}><p className="auth-error">Accounts could not be loaded. Please refresh and try again.</p></AdminShell>;
+  }
+
   const profileMap = new Map((profiles ?? []).map((profile) => [String(profile.id), profile]));
-  return <AdminShell title="Accounts" description="Global account visibility across every school. Master Admin identities are never offered as editable records here." breadcrumbs={[{ label: "Accounts" }]}><section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Account</th><th>School</th><th>Role</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody>{(memberships ?? []).map((membership) => { const profile = profileMap.get(String(membership.user_id)); const role = relation<{ name?: string; slug?: string }>(membership.roles); const school = relation<{ name?: string }>(membership.schools); const master = role?.slug === "super_admin"; return <tr key={`${membership.user_id}-${membership.school_id}`}><td><strong>{profile?.full_name ?? "Unnamed account"}</strong><small>{profile?.email ?? String(membership.user_id).slice(0, 12)}</small></td><td>{school?.name ?? "-"}</td><td>{role?.name ?? role?.slug ?? "-"}</td><td><span className={`admin-badge ${profile?.is_active ? "admin-badge--positive" : "admin-badge--warning"}`}>{profile?.is_active ? "Active" : "Inactive"}</span></td><td>{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "-"}</td><td>{master ? <span className="admin-note">Protected</span> : <span className="admin-note">Scoped actions stay in school management</span>}</td></tr>; })}</tbody></table></div></section></AdminShell>;
+  const protectedUserIds = new Set((memberships ?? []).filter((membership) => {
+    const role = relation<{ slug?: string }>(membership.roles);
+    return role?.slug === "super_admin" || role?.slug === "master_admin";
+  }).map((membership) => String(membership.user_id)));
+  const status = await searchParams;
+  const successMessage = status.success === "profile-updated"
+    ? "Account profile and school role were updated."
+    : status.success === "password-updated"
+      ? "Account password changed."
+      : null;
+  const errorMessage = status.error === "admin-auth-not-configured"
+    ? "Direct password changes are not enabled yet. Set the server-only SUPABASE_SERVICE_ROLE_KEY in the app hosting environment."
+    : status.error === "invalid-username"
+      ? "Username save nahi hua: 3–30 characters use karein; sirf English letters, numbers, dot (.), dash (-), ya underscore (_) allowed hain. Spaces nahi."
+      : status.error === "invalid-full-name"
+        ? "Full name kam se kam 2 characters ka hona chahiye aur 120 characters se zyada nahi ho sakta."
+        : status.error === "invalid-role"
+          ? "Selected school role valid nahi hai. Account dobara khol kar role select karein."
+          : status.error === "invalid-phone"
+            ? "Phone number 40 characters se zyada nahi ho sakta."
+            : status.error === "invalid-school-reference"
+              ? "School account link invalid hai. Accounts list refresh karein; agar phir bhi issue ho to is account ko School Details > Accounts se edit karein."
+              : status.error === "invalid-user-reference"
+                ? "Account reference invalid hai. Accounts page refresh karke account dobara kholen."
+                : status.error === "school-selection-required"
+                  ? "Yeh account multiple schools se linked hai. Is account ko us specific school ke School Details > Accounts page se edit karein."
+                  : status.error === "school-lookup-failed"
+                    ? "Account ka school lookup nahi ho saka. Page refresh karke dobara try karein."
+        : status.error === "invalid-account-details" || status.error === "invalid-profile"
+          ? "MBSadmin valid username hai. Username issue nahi hai; edit drawer band karke account dobara kholen aur full name aur school role check karke save karein."
+    : status.error === "password-update-failed"
+      ? "Password change failed. Check that the new password meets your Supabase Auth password policy."
+      : status.error === "invalid-password"
+        ? "Password must be at least 8 characters, match its confirmation, and belong to another account."
+        : status.error;
+
+  return <AdminShell title="Accounts" description="Edit a user's profile, login ID, or school role, or set a new password directly. Platform administrator identities stay protected." breadcrumbs={[{ label: "Accounts" }]}>
+    <div className="admin-account-messages" aria-live="polite">
+      {errorMessage && <p className="auth-error">{errorMessage}</p>}
+      {status.warning === "audit-failed" && <p className="auth-error">The account change completed, but its audit event could not be recorded. Please contact support.</p>}
+      {status.warning === "password-audit-failed" && <p className="auth-error">Password changed, but the audit event could not be recorded. Please contact support.</p>}
+      {status.warning === "login-username-sync-failed" && <p className="auth-error">The database profile changed, but login metadata could not be synchronized. Re-save the account or check the server-only Supabase key.</p>}
+      {status.error === "profile-update-not-verified" && <p className="auth-error">The account update could not be verified in the database. No success was reported; refresh and try again.</p>}
+      {status.error === "account-auth-unavailable" && <p className="auth-error">The account could not be loaded from Supabase Auth. Check the server-only Supabase key and account status.</p>}
+      {status.error === "admin-auth-not-configured" && <p className="auth-error">Account updates need the server-only SUPABASE_SERVICE_ROLE_KEY configured in the app hosting environment.</p>}
+      {successMessage && <p className="auth-success">{successMessage}</p>}
+    </div>
+    <section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table admin-account-table"><thead><tr><th>Account</th><th>School</th><th>Role</th><th>Status</th><th>Created</th><th>Manage account</th></tr></thead><tbody>{(memberships ?? []).map((membership) => {
+      const profile = profileMap.get(String(membership.user_id));
+      const role = relation<{ name?: string; slug?: string }>(membership.roles);
+      const school = relation<{ name?: string }>(membership.schools);
+      const protectedAccount = protectedUserIds.has(String(membership.user_id));
+      const availableRoles = (roles ?? []).filter((option) =>
+        (option.school_id === null || option.school_id === membership.school_id)
+        && !["super_admin", "master_admin"].includes(String(option.slug))
+      );
+      return <tr key={`${membership.user_id}-${membership.school_id}-${membership.role_id}`}>
+        <td><strong>{profile?.full_name ?? "Unnamed account"}</strong><small>{profile?.email ?? String(membership.user_id).slice(0, 12)}</small><small>@{profile?.username ?? "No username"}</small></td>
+        <td>{school?.name ?? "-"}</td>
+        <td>{role?.name ?? role?.slug ?? "-"}</td>
+        <td><span className={`admin-badge ${profile?.is_active ? "admin-badge--positive" : "admin-badge--warning"}`}>{profile?.is_active ? "Active" : "Inactive"}</span></td>
+        <td>{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "-"}</td>
+        <td>{protectedAccount ? <span className="admin-note">Platform admin protected</span> : <AccountEditPanel label="Edit account"><div className="admin-account-actions">
+          <form action={updateSchoolUserProfile}>
+            <input type="hidden" name="schoolId" value={membership.school_id} />
+            <input type="hidden" name="userId" value={membership.user_id} />
+            <label>Full name<input name="fullName" defaultValue={profile?.full_name ?? ""} minLength={2} maxLength={120} required /></label>
+            <label>User ID / login username<input name="username" defaultValue={profile?.username ?? ""} minLength={3} maxLength={30} pattern="[A-Za-z0-9._-]+" title="3-30 characters: English letters, numbers, dot, dash, underscore. No spaces." aria-describedby={`admin-username-help-${membership.user_id}`} required /><small id={`admin-username-help-${membership.user_id}`}>3–30 characters; letters, numbers, . _ - only. No spaces.</small></label>
+            <label>Phone<input name="phone" defaultValue={profile?.phone ?? ""} maxLength={40} /></label>
+            <label>School role<select name="roleId" defaultValue={membership.role_id} required>{availableRoles.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+            <button type="submit" className="admin-button admin-button--primary">Save account</button>
+          </form>
+          <form action={setSchoolUserPassword} className="admin-account-password-form">
+            <input type="hidden" name="schoolId" value={membership.school_id} />
+            <input type="hidden" name="userId" value={membership.user_id} />
+            <h3>Set password directly</h3>
+            <label>New password<input type="password" name="password" minLength={8} maxLength={128} autoComplete="new-password" required /></label>
+            <label>Confirm password<input type="password" name="confirmPassword" minLength={8} maxLength={128} autoComplete="new-password" required /></label>
+            <button type="submit" className="admin-button">Change password</button>
+          </form>
+        </div></AccountEditPanel>}</td>
+      </tr>;
+    })}{!memberships?.length && <tr><td colSpan={6}>No school accounts found.</td></tr>}</tbody></table></div></section>
+  </AdminShell>;
 }
 
 async function BillingPage({ payments = false }: { payments?: boolean }) {
@@ -197,9 +287,9 @@ async function ReportsPage() {
   return <AdminShell title="Reports" description="Global reports assembled from current operational tables." breadcrumbs={[{ label: "Reports" }]}><section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-kicker">Available reports</p><h2>Platform snapshot</h2></div><a className="admin-button admin-button--primary" href="/reports/export">Export CSV</a></div><div className="admin-report-list"><div><span>Schools report</span><strong>{schools?.length ?? 0} schools · {schools?.filter((school) => school.is_active).length ?? 0} active</strong></div><div><span>Accounts report</span><strong>{new Set((roles ?? []).map((role) => role.user_id)).size} accounts</strong></div><div><span>Billing report</span><strong>{formatCurrency((invoices ?? []).reduce((sum, invoice) => sum + Number(invoice.total ?? 0), 0))} billed</strong></div><div><span>Payments report</span><strong>{formatCurrency((payments ?? []).reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0))} received</strong></div><div><span>People report</span><strong>{students?.length ?? 0} students · {teachers?.length ?? 0} teachers</strong></div></div></section></AdminShell>;
 }
 
-export default async function AdminSectionPage({ params }: { params: Promise<{ section: string }> }) {
+export default async function AdminSectionPage({ params, searchParams }: { params: Promise<{ section: string }>; searchParams: Promise<{ error?: string; success?: string; warning?: string }> }) {
   const { section } = await params;
-  if (section === "accounts") return <AccountsPage />;
+  if (section === "accounts") return <AccountsPage searchParams={searchParams} />;
   if (section === "billing") return <BillingPage />;
   if (section === "payments") return <BillingPage payments />;
   if (section === "storage") return <StoragePage />;

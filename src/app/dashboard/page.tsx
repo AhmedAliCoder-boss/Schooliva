@@ -17,7 +17,10 @@ export default async function DashboardPage() {
 
   const activeSchoolContext = await getActiveSchoolContext(supabase, user.id);
   if (activeSchoolContext.isMasterAdmin && !activeSchoolContext.schoolId) redirect("/admin");
-  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+  const { data: profile } = await supabase.from("profiles").select("full_name,avatar_path").eq("id", user.id).maybeSingle();
+  const { data: avatar } = profile?.avatar_path
+    ? await supabase.storage.from("profile-avatars").createSignedUrl(profile.avatar_path, 60 * 60)
+    : { data: null };
   const { data: memberships } = await supabase.from("user_roles").select("school_id, roles(name), schools(name)").eq("user_id", user.id).order("school_id", { ascending: true });
   const { data: membership } = activeSchoolContext.schoolId
     ? await supabase.from("user_roles").select("school_id, roles(name), schools(name)").eq("user_id", user.id).eq("school_id", activeSchoolContext.schoolId).limit(1).maybeSingle()
@@ -95,6 +98,7 @@ export default async function DashboardPage() {
       headerVariant="dashboard"
       userName={profile?.full_name ?? user.email ?? "Schooliva user"}
       userRole={roleLabel}
+      userAvatarUrl={avatar?.signedUrl ?? null}
       unreadNotifications={Number(metrics.unread_notifications ?? 0)}
       schoolContext={activeSchoolContext.isMasterAdmin ? selectedSchool?.name ?? activeSchoolContext.schoolName ?? "Selected school" : undefined}
       schoolContextAction={activeSchoolContext.isMasterAdmin ? <form action={exitSchoolWorkspace}><button className="sign-out" type="submit">Return to platform</button></form> : undefined}

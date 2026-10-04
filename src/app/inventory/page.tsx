@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CategoryForm, ItemForm, StockTransactionForm, SupplierForm, UnitForm } from "@/components/inventory/inventory-forms";
+import { ProgressWheel } from "@/components/progress-wheel";
 import { getActiveSchoolContext } from "@/lib/admin/school-context";
 
 export default async function InventoryPage() {
@@ -27,10 +28,12 @@ export default async function InventoryPage() {
   const lowStockCount = (items ?? []).filter((item) => Number(item.current_quantity) <= Number(item.min_stock_level)).length;
   const totalUnits = (items ?? []).reduce((sum, item) => sum + Number(item.current_quantity ?? 0), 0);
   const recentTransactions = transactions ?? [];
+  const itemCount = (items ?? []).length;
+  const lowStockPercent = itemCount ? Math.round(lowStockCount / itemCount * 100) : 0;
   return <main className="students-shell">
     <header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header>
     <section className="module-page-header"><div className="module-page-header__row"><div><p className="module-page-header__eyebrow">Inventory</p><h1>Stock, suppliers, and adjustments.</h1><p>Track every movement, keep accurate quantities, and surface low-stock alerts before operational disruption.</p></div></div></section>
-    <section className="module-kpi-grid"><article className="module-kpi"><span>Items</span><strong>{(items ?? []).length}</strong></article><article className="module-kpi"><span>Total units</span><strong>{totalUnits}</strong></article><article className="module-kpi"><span>Low stock</span><strong>{lowStockCount}</strong></article><article className="module-kpi"><span>Transactions</span><strong>{recentTransactions.length}</strong></article></section>
+    <section className="module-kpi-grid" aria-label="Inventory summary"><article className="module-kpi"><span>Items</span><strong>{itemCount}</strong></article><article className="module-kpi"><span>Total units</span><strong>{totalUnits}</strong></article><ProgressWheel label="Low stock" value={lowStockCount} percentage={lowStockPercent} color="#be123c" detail={`${lowStockCount} of ${itemCount} items`} /><article className="module-kpi"><span>Transactions</span><strong>{recentTransactions.length}</strong></article></section>
     <section className="setup-card"><h3>Catalog setup</h3><CategoryForm /><UnitForm /><SupplierForm /><ItemForm categories={categoryOptions} units={unitOptions} suppliers={supplierOptions} /></section>
     <section className="setup-card"><h3>Stock movement</h3><StockTransactionForm items={itemOptions} /></section>
     <div className="student-table-wrap"><table className="student-table"><thead><tr><th>Item</th><th>SKU</th><th>Location</th><th>Stock</th><th>Min</th><th>Status</th></tr></thead><tbody>{(items ?? []).length ? (items ?? []).map((item) => { const low = Number(item.current_quantity) <= Number(item.min_stock_level); return <tr key={String(item.id)}><td>{String(item.name)}</td><td>{String(item.sku)}</td><td>{String(item.location ?? "-")}</td><td>{String(item.current_quantity)}</td><td>{String(item.min_stock_level)}</td><td><span className={`status-pill ${low ? "draft" : "active"}`}>{low ? "Low stock" : "Healthy"}</span></td></tr>; }) : <tr><td colSpan={6}><div className="student-empty"><h3>No inventory items</h3><p>Add stock items to generate low-stock monitoring.</p></div></td></tr>}</tbody></table></div>

@@ -22,6 +22,10 @@ Set these as encrypted hosting variables for Production, Preview, and Developmen
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase publishable/anon key only
 - `NEXT_PUBLIC_SITE_URL`: canonical HTTPS application origin, for example `https://schooliva.example`
+- `ADMIN_CONTACT_EMAIL`: administrator email address used by the sign-in help form's email draft. Configure it for local and production environments.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase service-role key required for admins to set another user's password directly. Keep it encrypted in the hosting provider and never use a `NEXT_PUBLIC_` prefix.
+
+Direct admin password updates remain unavailable until `SUPABASE_SERVICE_ROLE_KEY` is configured for the server environment. The key is used only by the server-side Supabase Auth Admin API; it is never sent to the browser.
 
 Never set a service-role key under `NEXT_PUBLIC_*`. The frontend does not require a service-role key.
 
@@ -51,12 +55,13 @@ supabase db push
 ```
 
 6. Review the migration output and confirm all migrations are applied in order. The Admissions module requires both `20261005000100_admissions_module.sql` and `20261005000200_admissions_workflows.sql`; deploy them before opening Admissions, or the API will report that `public.admissions` is missing from the schema cache.
+   The `20261006000100_dashboard_profiles_and_user_management.sql` migration adds the private profile-avatar bucket and the permission-checked school account role update function.
 7. Run `supabase test db` after installing the CLI and pgTAP support. The Phase 27 and Phase 29 database tests check RLS, integrity, and storage configuration.
 8. Create separate production verification users for administrator, teacher, parent, student, accountant, librarian, transport manager, and inventory manager workflows. Do not reuse real user accounts.
 
 ## Storage verification
 
-Storage buckets must remain private. The migrations create private buckets for assignment files, submissions, leave attachments, admission documents, private documents, and generated certificates. Run [phase29_deployment.sql](../supabase/tests/phase29_deployment.sql) and manually verify:
+Storage buckets must remain private. The migrations create private buckets for assignment files, submissions, leave attachments, admission documents, private documents, generated certificates, and profile avatars. Profile photos are readable only by their owner and are displayed using short-lived signed URLs. Run [phase29_deployment.sql](../supabase/tests/phase29_deployment.sql) and manually verify:
 
 - unauthenticated downloads fail
 - a file owner can access only their permitted file

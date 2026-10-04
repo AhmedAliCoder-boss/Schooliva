@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { signOut } from "@/app/actions/auth";
 import { NavIcon, navGroups } from "@/components/schooliva-shell";
 
 const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/reset-password", "/admin"];
@@ -68,6 +69,9 @@ export function AppChrome({ children, schoolLogoUrl }: { children: React.ReactNo
             </div>
           ))}
         </nav>
+        <form action={signOut} className="schooliva-sidebar__sign-out">
+          <button type="submit" onClick={() => setSidebarOpen(false)}><span aria-hidden="true">↪</span><span>Sign out</span></button>
+        </form>
       </aside>
       <div className="app-chrome__content">{children}</div>
     </div>

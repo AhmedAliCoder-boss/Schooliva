@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { canManageUserAccounts, getCurrentUser } from "@/lib/auth/authorization";
 import { getAuthErrorMessage } from "@/lib/auth/messages";
 import { isMasterAdminUser } from "@/lib/auth/roles";
-import { createAccountSchema, forgotPasswordSchema, resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
+import { createAccountSchema, resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { getSafeSiteOrigin, isSafeRelativePath } from "@/lib/security/validation";
 
@@ -28,7 +28,7 @@ export async function signIn(_: AuthFormState | undefined, formData: FormData): 
   const { data: resolvedEmail, error: lookupError } = identifier.includes("@")
     ? { data: identifier, error: null }
     : await supabase.rpc("resolve_login_email", { login_identifier: identifier });
-  if (lookupError || !resolvedEmail) return { error: "Email, username ya User ID incorrect hai." };
+  if (lookupError || !resolvedEmail) return { error: "Account nahi mila. Email ya admin drawer mein save kiya exact login username enter karein; 'School Admin' role ka naam hai, login username nahi." };
 
   const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password: parsed.data.password });
   if (error) return { error: getAuthErrorMessage(error.message) };
@@ -89,20 +89,6 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/sign-in");
-}
-
-export async function requestPasswordReset(_: AuthFormState | undefined, formData: FormData): Promise<AuthFormState> {
-  const parsed = forgotPasswordSchema.safeParse({ email: formData.get("email") });
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
-
-  const supabase = await createClient();
-  const origin = getSafeSiteOrigin();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${origin}/auth/callback?next=/reset-password`,
-  });
-
-  if (error) return { error: getAuthErrorMessage(error.message) };
-  return { success: "Agar ye email registered hai, reset link inbox mein bhej diya gaya hai." };
 }
 
 export async function resetPassword(_: AuthFormState | undefined, formData: FormData): Promise<AuthFormState> {

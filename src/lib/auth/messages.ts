@@ -2,7 +2,7 @@ export function getAuthErrorMessage(message: string) {
   const normalized = message.toLowerCase();
 
   if (normalized.includes("invalid login credentials")) {
-    return "Supabase login ke liye User ID nahi, registered email aur password use karein. Demo seed apply nahi hui to admin@schooliva.demo / SchoolivaDemo@123 account pehle create karein.";
+    return "Email ya updated login username aur password check karein. Username mein space nahi hota; account ka role name (jaise School Admin) login username nahi hota.";
   }
   if (normalized.includes("email not confirmed")) {
     return "Pehle apni email confirm karein, phir sign in karein.";

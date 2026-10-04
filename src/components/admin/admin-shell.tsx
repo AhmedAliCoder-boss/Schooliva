@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { signOut } from "@/app/actions/auth";
 import { NavIcon } from "@/components/schooliva-shell";
 import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
 
@@ -15,6 +16,7 @@ const groups = [
   { title: "USAGE", items: [{ label: "Storage", href: "/admin/storage", icon: "storage" }, { label: "Usage analytics", href: "/admin/usage", icon: "reports" }] },
   { title: "MANAGEMENT", items: [{ label: "Activity / Audit", href: "/admin/activity", icon: "audit" }, { label: "Notifications", href: "/admin/notifications", icon: "notifications" }, { label: "Reports", href: "/admin/reports", icon: "reports" }] },
   { title: "SYSTEM", items: [{ label: "Admin settings", href: "/admin/settings", icon: "settings" }] },
+  { title: "ACCOUNT", items: [{ label: "My profile", href: "/profile", icon: "profile" }] },
 ];
 
 function activePath(pathname: string, href: string) {
@@ -30,7 +32,7 @@ export function AdminShell({ children, title, description, breadcrumbs = [], sch
     <aside className={`admin-sidebar ${open ? "is-open" : ""}`}>
       <div className="admin-sidebar__top"><Link href="/admin" className="admin-brand" onClick={() => setOpen(false)}><Image src="/brand/landscape_logo.png" alt="Schooliva" width={160} height={34} className="admin-brand__logo" priority /></Link><button className="admin-sidebar__close" aria-label="Close admin navigation" onClick={() => setOpen(false)}>×</button></div>
       <nav className="admin-nav" aria-label="Master Admin navigation">{groups.map((group) => <div className="admin-nav__group" key={group.title}><p>{group.title}</p>{group.items.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={`admin-nav__item ${activePath(pathname, item.href) ? "is-active" : ""}`}><NavIcon name={item.icon} /><span>{item.label}</span></Link>)}</div>)}</nav>
-      <div className="admin-sidebar__footer"><Link href="/admin/schools">Select a school</Link><span>Master Admin access</span></div>
+      <div className="admin-sidebar__footer"><Link href="/admin/schools">Select a school</Link><span>Master Admin access</span><form action={signOut}><button type="submit">Sign out</button></form></div>
     </aside>
     <div className="admin-main">
       <header className="admin-header"><button className="admin-menu" aria-label="Open admin navigation" onClick={() => setOpen(true)}>☰</button><div className="admin-header__crumbs"><span>Schooliva Platform</span><b>/</b>{breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`}>{crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : crumb.label}{index < breadcrumbs.length - 1 && <b>/</b>}</span>)}</div><div className="admin-header__right"><span className="admin-live"><i /> Live platform</span><Link href="/profile" className="admin-avatar" aria-label="View profile">A</Link></div></header>
