@@ -5,7 +5,7 @@ import { signOut } from "@/app/actions/auth";
 import { exitSchoolWorkspace, selectSchoolWorkspace } from "@/app/actions/admin";
 import { LiveGreeting } from "@/components/dashboard/live-greeting";
 import { getActiveSchoolContext } from "@/lib/admin/school-context";
-import { buildBrandingTheme } from "@/lib/school-branding";
+import { getSchoolBrandingForSchool } from "@/lib/school-branding";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/format/currency";
 import { SchoolivaShell } from "@/components/schooliva-shell";
@@ -37,22 +37,8 @@ export default async function DashboardPage() {
   const schoolId = activeSchoolContext.schoolId;
   const { data: summary } = schoolId ? await supabase.rpc("dashboard_summary", { target_school_id: schoolId }) : { data: null };
   const { data: trendData } = schoolId ? await supabase.rpc("dashboard_trends", { target_school_id: schoolId }) : { data: null };
-  const { data: brandingRecord } = schoolId ? await supabase.from("school_branding").select("primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode").eq("school_id", schoolId).maybeSingle() : { data: null };
-  const brandingTheme = brandingRecord ? buildBrandingTheme({
-    primaryColor: brandingRecord.primary_color,
-    secondaryColor: brandingRecord.secondary_color,
-    accentColor: brandingRecord.accent_color,
-    backgroundColor: brandingRecord.background_color,
-    foregroundColor: brandingRecord.foreground_color,
-    cardColor: brandingRecord.card_color,
-    mutedColor: brandingRecord.muted_color,
-    borderColor: brandingRecord.border_color,
-    successColor: brandingRecord.success_color,
-    warningColor: brandingRecord.warning_color,
-    destructiveColor: brandingRecord.destructive_color,
-    infoColor: brandingRecord.info_color,
-    themeMode: brandingRecord.theme_mode,
-  }) : undefined;
+  const brandingProfile = schoolId ? await getSchoolBrandingForSchool(supabase, schoolId) : null;
+  const brandingTheme = brandingProfile?.theme;
   const metrics = (summary ?? {}) as Record<string, unknown>;
   const trends = (trendData ?? {}) as { attendance?: Array<{ date: string; value: number }>; payments?: Array<{ date: string; value: number }>; schools_count?: number };
   const roleSlug = activeSchoolContext.isMasterAdmin ? "super_admin" : String(metrics.role ?? role?.name ?? "member").toLowerCase().replaceAll(" ", "_");
@@ -113,6 +99,7 @@ export default async function DashboardPage() {
       schoolContext={activeSchoolContext.isMasterAdmin ? selectedSchool?.name ?? activeSchoolContext.schoolName ?? "Selected school" : undefined}
       schoolContextAction={activeSchoolContext.isMasterAdmin ? <form action={exitSchoolWorkspace}><button className="sign-out" type="submit">Return to platform</button></form> : undefined}
       brandingTheme={brandingTheme}
+      schoolLogoUrl={brandingProfile?.logoUrl ?? null}
     >
       <section className="dashboard-welcome"><div><p className="dashboard-kicker">{selectedSchool?.name ?? school?.name ?? "School workspace"} / {roleLabel}</p><LiveGreeting firstName={firstName} /><p>One clear view of the people, learning, and operations moving through your school today.</p></div><div className="dashboard-actions"><Link href="/reports" className="dashboard-action dashboard-action--primary">View reports <span>-&gt;</span></Link><Link href="/search" className="dashboard-action">Search records <span>&#9906;</span></Link></div></section>
       {schoolId && (selectedSchool || (membership && school)) ? <section className="dashboard-workspace-bar"><div><span>Active workspace</span><strong>{selectedSchool?.name ?? school?.name}</strong><small>{roleLabel} access / Updated just now</small></div><span className="dashboard-status"><i /> Systems operational</span></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}

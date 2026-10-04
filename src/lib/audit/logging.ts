@@ -34,8 +34,16 @@ export function buildAuditLogPayload({
   };
 }
 
+type AuditSupabaseClient = {
+  rpc: <FnName extends string, Args extends Record<string, unknown> = Record<string, unknown>>(
+    fn: FnName,
+    args?: Args,
+    options?: Record<string, unknown>,
+  ) => unknown;
+};
+
 export async function recordAuditEvent(
-  supabase: any,
+  supabase: AuditSupabaseClient,
   input: {
     schoolId: string;
     action: string;
@@ -46,6 +54,6 @@ export async function recordAuditEvent(
   }
 ) {
   const payload = buildAuditLogPayload(input);
-  const { data, error } = await supabase.rpc("write_audit_log", payload);
-  return { data, error };
+  const response = (await supabase.rpc("write_audit_log", payload)) as { data: unknown; error: unknown };
+  return { data: response.data, error: response.error };
 }

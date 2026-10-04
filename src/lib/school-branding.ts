@@ -140,10 +140,27 @@ export function buildBrandingCssVars(theme: BrandingTheme) {
     "--brand-danger": theme.destructiveColor,
     "--brand-info": theme.infoColor,
     "--brand-theme-mode": theme.themeMode,
+    "--brand-blue": theme.primaryColor,
+    "--brand-navy": theme.secondaryColor,
+    "--brand-cyan": theme.accentColor,
+    "--brand-green": theme.successColor,
+    "--moss": theme.primaryColor,
+    "--warm": theme.accentColor,
+    "--lime": theme.accentColor,
+    "--background": theme.backgroundColor,
+    "--foreground": theme.foregroundColor,
+    "--surface": theme.cardColor,
+    "--surface-soft": theme.backgroundColor,
+    "--ink-soft": theme.mutedColor,
+    "--line": theme.borderColor,
+    "--success": theme.successColor,
+    "--warning": theme.warningColor,
+    "--danger": theme.destructiveColor,
+    "--info": theme.infoColor,
   } as Record<string, string>;
 }
 
-export async function getSchoolBrandingForSchool(supabase: { from: (table: string) => any; storage: { from: (bucket: string) => any } }, schoolId: string) {
+export async function getSchoolBrandingForSchool(supabase: any, schoolId: string) {
   const { data: branding } = await supabase.from("school_branding").select("id,school_id,logo_path,logo_dark_path,favicon_path,primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode").eq("school_id", schoolId).maybeSingle();
 
   if (!branding) {

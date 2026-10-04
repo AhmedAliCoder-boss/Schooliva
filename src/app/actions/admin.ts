@@ -11,7 +11,6 @@ import { reconcileInvoiceStatus } from "@/lib/billing-reconciliation";
 import { resolveContractRenewalWindow } from "@/lib/contract-renewal";
 import { recordAuditEvent } from "@/lib/audit/logging";
 import { sanitizeColor } from "@/lib/school-branding";
-import { dispatchFeeOverdueNotifications, shouldDispatchFeeOverdueNotification } from "@/lib/notifications/dispatch";
 import { createClient } from "@/lib/supabase/server";
 
 const schoolSchema = z.object({
@@ -74,6 +73,26 @@ const platformContractSchema = z.object({
   renewalDate: z.string().trim().optional().or(z.literal("")),
 });
 
+const platformBillSchema = z.object({
+  schoolId: z.string().uuid(),
+  billNumber: z.string().trim().min(2),
+  description: z.string().trim().min(2),
+  amount: z.coerce.number().positive(),
+  dueDate: z.string().trim().min(1),
+});
+
+const platformTransactionSchema = z.object({
+  billId: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  paymentMethod: z.enum(["cash", "bank_transfer", "card", "upi", "cheque", "other"]).default("bank_transfer"),
+  transactionDate: z.string().trim().min(1),
+  notes: z.string().trim().optional().or(z.literal("")),
+});
+
+const platformBillingReconciliationSchema = z.object({
+  billId: z.string().uuid().optional(),
+});
+
 const schoolTrialSchema = z.object({
   schoolId: z.string().uuid(),
   trialName: z.string().trim().min(2),
@@ -84,14 +103,6 @@ const schoolTrialSchema = z.object({
   notes: z.string().trim().optional().or(z.literal("")),
 });
 
-const manualPaymentSchema = z.object({
-  invoiceId: z.string().uuid(),
-  amount: z.coerce.number().positive(),
-  paymentMethod: z.enum(["cash", "bank_transfer", "card", "upi", "cheque", "other"]).default("bank_transfer"),
-  paymentDate: z.string().trim().min(1),
-  notes: z.string().trim().optional().or(z.literal("")),
-});
-
 const rolePermissionSchema = z.object({
   roleId: z.string().uuid(),
   permissionId: z.string().uuid(),
@@ -99,10 +110,6 @@ const rolePermissionSchema = z.object({
 
 const contractLifecycleSchema = z.object({
   contractId: z.string().uuid(),
-});
-
-const billingReconciliationSchema = z.object({
-  invoiceId: z.string().uuid().optional(),
 });
 
 const lifecycleActivationSchema = z.object({
@@ -481,8 +488,42 @@ export async function saveSchoolBranding(formData: FormData) {
     redirect("/dashboard?error=not-authorized");
   }
 
+  const existingBranding = await supabase.from("school_branding").select("logo_path").eq("school_id", authorizedSchoolId).maybeSingle();
+  if (existingBranding.error) {
+    redirect("/admin/schools/" + authorizedSchoolId + "?error=branding-load-failed");
+  }
+  const uploadedFile = formData.get("schoolLogo");
+  let logoPath = existingBranding.data?.logo_path ?? null;
+  let uploadedLogoPath: string | null = null;
+
+  if (uploadedFile instanceof File && uploadedFile.size > 0) {
+    const allowedMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    if (!allowedMimeTypes.includes(uploadedFile.type) && !uploadedFile.name.toLowerCase().endsWith(".svg")) {
+      redirect("/admin/schools/" + authorizedSchoolId + "?error=invalid-logo-type");
+    }
+
+    if (uploadedFile.size > 5 * 1024 * 1024) {
+      redirect("/admin/schools/" + authorizedSchoolId + "?error=logo-too-large");
+    }
+
+    const extension = uploadedFile.name.includes(".") ? uploadedFile.name.split(".").pop() ?? "png" : "png";
+    const storagePath = `${authorizedSchoolId}/logo-${crypto.randomUUID()}.${extension.toLowerCase()}`;
+    const { error: uploadError } = await supabase.storage.from("school-branding").upload(storagePath, uploadedFile, {
+      upsert: true,
+      contentType: uploadedFile.type || "image/png",
+    });
+
+    if (uploadError) {
+      redirect("/admin/schools/" + authorizedSchoolId + "?error=logo-upload-failed");
+    }
+
+    logoPath = storagePath;
+    uploadedLogoPath = storagePath;
+  }
+
   const values = {
     school_id: authorizedSchoolId,
+    logo_path: logoPath,
     primary_color: sanitizeColor(parsed.data.primaryColor) ?? "#2563eb",
     secondary_color: sanitizeColor(parsed.data.secondaryColor) ?? "#0f172a",
     accent_color: sanitizeColor(parsed.data.accentColor) ?? "#f59e0b",
@@ -500,7 +541,20 @@ export async function saveSchoolBranding(formData: FormData) {
 
   const { error } = await supabase.from("school_branding").upsert({ ...values }, { onConflict: "school_id" });
   if (error) {
+    if (uploadedLogoPath) {
+      const { error: cleanupError } = await supabase.storage.from("school-branding").remove([uploadedLogoPath]);
+      if (cleanupError) {
+        redirect("/admin/schools/" + authorizedSchoolId + "?error=branding-save-and-logo-cleanup-failed");
+      }
+    }
     redirect("/admin/schools?error=branding-save-failed");
+  }
+
+  if (existingBranding.data?.logo_path && existingBranding.data.logo_path !== logoPath) {
+    const { error: removeError } = await supabase.storage.from("school-branding").remove([existingBranding.data.logo_path]);
+    if (removeError) {
+      redirect("/admin/schools/" + authorizedSchoolId + "?success=branding-saved&warning=old-logo-cleanup-failed");
+    }
   }
 
   redirect("/admin/schools/" + authorizedSchoolId + "?success=branding-saved");
@@ -569,6 +623,51 @@ export async function createPlatformContract(formData: FormData) {
   redirect("/admin/contracts?success=contract-created");
 }
 
+export async function createPlatformBill(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
+    redirect("/dashboard?error=not-authorized");
+  }
+
+  const parsed = platformBillSchema.safeParse({
+    schoolId: formData.get("schoolId"),
+    billNumber: formData.get("billNumber"),
+    description: formData.get("description"),
+    amount: formData.get("amount"),
+    dueDate: formData.get("dueDate"),
+  });
+  if (!parsed.success) redirect("/admin/billing?error=invalid-bill");
+
+  const { data: allSchools } = await supabase.from("schools").select("id");
+  const schoolId = resolveAuthorizedSchoolId({
+    candidateSchoolId: parsed.data.schoolId,
+    availableSchoolIds: (allSchools ?? []).map((school) => school.id),
+    isMasterAdmin: true,
+  });
+  if (!schoolId) redirect("/admin/billing?error=school-not-found");
+
+  const { data: bill, error } = await supabase.from("platform_bills").insert({
+    school_id: schoolId,
+    bill_number: parsed.data.billNumber,
+    description: parsed.data.description,
+    total_amount: parsed.data.amount,
+    due_date: parsed.data.dueDate,
+    created_by: user.id,
+  }).select("id").single();
+  if (error || !bill) redirect("/admin/billing?error=bill-create-failed");
+
+  await recordAuditEvent(supabase, {
+    schoolId,
+    action: "create",
+    entityType: "platform_bills",
+    entityId: bill.id,
+    metadata: { bill_number: parsed.data.billNumber, amount: parsed.data.amount },
+    actorId: user.id,
+  });
+  redirect("/admin/billing?success=bill-created");
+}
+
 export async function createSchoolTrial(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -627,50 +726,52 @@ export async function createSchoolTrial(formData: FormData) {
   redirect("/admin/trials?success=trial-created");
 }
 
-export async function recordSchoolPayment(formData: FormData) {
+export async function recordPlatformTransaction(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !(await isMasterAdminUser(supabase, user.id))) {
     redirect("/dashboard?error=not-authorized");
   }
 
-  const parsed = manualPaymentSchema.safeParse({
-    invoiceId: formData.get("invoiceId"),
+  const parsed = platformTransactionSchema.safeParse({
+    billId: formData.get("billId"),
     amount: formData.get("amount"),
     paymentMethod: formData.get("paymentMethod") ?? "bank_transfer",
-    paymentDate: formData.get("paymentDate") ?? "",
+    transactionDate: formData.get("transactionDate") ?? "",
     notes: formData.get("notes") ?? "",
   });
+  if (!parsed.success) redirect("/admin/payments?error=invalid-payment");
 
-  if (!parsed.success) {
-    redirect("/admin/payments?error=invalid-payment");
-  }
-
-  const { data: invoice, error: invoiceError } = await supabase.from("fee_invoices").select("id,school_id,remaining_amount").eq("id", parsed.data.invoiceId).maybeSingle();
-  if (invoiceError || !invoice) {
-    redirect("/admin/payments?error=invoice-not-found");
-  }
-
-  if (Number(parsed.data.amount) > Number(invoice.remaining_amount ?? 0) + 0.01) {
+  const { data: bill, error: billError } = await supabase.from("platform_bills")
+    .select("id,school_id,bill_number,total_amount,paid_amount")
+    .eq("id", parsed.data.billId)
+    .maybeSingle();
+  if (billError || !bill) redirect("/admin/payments?error=bill-not-found");
+  if (Number(parsed.data.amount) > Number(bill.total_amount) - Number(bill.paid_amount ?? 0)) {
     redirect("/admin/payments?error=payment-exceeds-balance");
   }
 
-  const paymentReference = `MP-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  const { error } = await supabase.from("fee_payments").insert({
-    school_id: invoice.school_id,
-    invoice_id: invoice.id,
-    payment_reference: paymentReference,
+  const transactionReference = `PT-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const { data: transaction, error } = await supabase.from("platform_transactions").insert({
+    school_id: bill.school_id,
+    bill_id: bill.id,
+    transaction_reference: transactionReference,
     amount: parsed.data.amount,
     payment_method: parsed.data.paymentMethod,
-    payment_date: parsed.data.paymentDate,
-    received_by: user.id,
+    transaction_date: parsed.data.transactionDate,
     notes: parsed.data.notes || null,
+    created_by: user.id,
+  }).select("id").single();
+  if (error || !transaction) redirect("/admin/payments?error=payment-create-failed");
+
+  await recordAuditEvent(supabase, {
+    schoolId: bill.school_id,
+    action: "create",
+    entityType: "platform_transactions",
+    entityId: transaction.id,
+    metadata: { transaction_reference: transactionReference, bill_number: bill.bill_number, amount: parsed.data.amount },
+    actorId: user.id,
   });
-
-  if (error) {
-    redirect("/admin/payments?error=payment-create-failed");
-  }
-
   redirect("/admin/payments?success=payment-recorded");
 }
 
@@ -840,65 +941,34 @@ export async function renewSchoolContract(formData: FormData) {
   redirect("/admin/contracts?success=contract-renewed");
 }
 
-export async function reconcileBillingInvoices(formData: FormData) {
+export async function reconcilePlatformBills(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !(await isMasterAdminUser(supabase, user.id))) {
     redirect("/dashboard?error=not-authorized");
   }
 
-  const parsed = billingReconciliationSchema.safeParse({ invoiceId: formData.get("invoiceId") ?? undefined });
-  if (!parsed.success) {
-    redirect("/admin/billing?error=invalid-reconciliation");
-  }
+  const parsed = platformBillingReconciliationSchema.safeParse({ billId: formData.get("billId") ?? undefined });
+  if (!parsed.success) redirect("/admin/billing?error=invalid-reconciliation");
 
-  let query = supabase.from("fee_invoices").select("id,invoice_number,total,paid_amount,due_date,status,school_id");
-  if (parsed.data.invoiceId) {
-    query = query.eq("id", parsed.data.invoiceId);
-  }
+  let query = supabase.from("platform_bills").select("id,total_amount,paid_amount,due_date");
+  if (parsed.data.billId) query = query.eq("id", parsed.data.billId);
+  const { data: bills, error } = await query;
+  if (error || !bills) redirect("/admin/billing?error=reconciliation-failed");
 
-  const { data: invoices, error } = await query;
-  if (error || !invoices) {
-    redirect("/admin/billing?error=reconciliation-failed");
-  }
-
-  for (const invoice of invoices) {
+  for (const bill of bills) {
     const nextState = reconcileInvoiceStatus({
-      total: Number(invoice.total ?? 0),
-      paidAmount: Number(invoice.paid_amount ?? 0),
-      dueDate: String(invoice.due_date ?? ""),
+      total: Number(bill.total_amount ?? 0),
+      paidAmount: Number(bill.paid_amount ?? 0),
+      dueDate: String(bill.due_date ?? ""),
     });
-
-    const { error: updateError } = await supabase.from("fee_invoices").update({
-      status: nextState.status,
-      remaining_amount: nextState.remainingAmount,
-      updated_at: new Date().toISOString(),
-    }).eq("id", invoice.id);
-
-    if (updateError) {
-      redirect("/admin/billing?error=reconciliation-update-failed");
-    }
-
-    if (nextState.status === "overdue") {
-      const { data: recentNotifications } = await supabase.from("notifications")
-        .select("created_at")
-        .eq("school_id", invoice.school_id)
-        .eq("event_type", "fee_overdue")
-        .eq("entity_id", invoice.id);
-
-      if (shouldDispatchFeeOverdueNotification(recentNotifications ?? [])) {
-        await dispatchFeeOverdueNotifications(supabase, {
-          schoolId: invoice.school_id,
-          invoiceId: invoice.id,
-          invoiceNumber: String(invoice.invoice_number ?? "INV-UNK"),
-          amount: nextState.remainingAmount,
-          dueDate: String(invoice.due_date ?? ""),
-        });
-      }
-    }
+    const { error: updateError } = await supabase.from("platform_bills")
+      .update({ status: nextState.status })
+      .eq("id", bill.id);
+    if (updateError) redirect("/admin/billing?error=reconciliation-update-failed");
   }
 
-  redirect("/admin/billing?success=reconciliation-complete");
+  redirect("/admin/billing?success=bills-reconciled");
 }
 
 export async function assignPermissionToRole(formData: FormData) {

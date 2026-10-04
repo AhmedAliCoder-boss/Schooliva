@@ -31,7 +31,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Search
 
   if (!activeSchool.schoolId) {
     if (activeSchool.isMasterAdmin) redirect("/admin");
-    return <main className="setup-onboarding"><div className="setup-onboarding-inner"><Link href="/" aria-label="Schooliva home"><Image className="setup-logo" src="/brand/logo.png" alt="Schooliva" width={240} height={240} priority /></Link><p className="eyebrow">School setup</p><h1>Set up your school.</h1><p className="setup-lede">Create the school workspace that will hold your academic structure and future operations.</p><BootstrapSchoolForm /></div></main>;
+    return <main className="setup-onboarding"><div className="setup-onboarding-inner"><Link href="/" aria-label="Schooliva home"><Image className="setup-logo" src="/brand/landscape_logo.png" alt="Schooliva" width={240} height={80} priority /></Link><p className="eyebrow">School setup</p><h1>Set up your school.</h1><p className="setup-lede">Create the school workspace that will hold your academic structure and future operations.</p><BootstrapSchoolForm /></div></main>;
   }
 
   const { supabase, schoolId } = await requireSetupContext();

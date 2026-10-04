@@ -2,6 +2,19 @@ import { assignPermissionToRole, removePermissionFromRole } from "@/app/actions/
 import { AdminShell } from "@/components/admin/admin-shell";
 import { requireMasterAdmin } from "@/lib/admin/guard";
 
+type RoleSchoolRow = {
+  name?: string | null;
+};
+
+type AdminRoleRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  school_id?: string | null;
+  schools?: RoleSchoolRow | RoleSchoolRow[] | null;
+};
+
 export default async function AdminRolesPage() {
   const { supabase } = await requireMasterAdmin();
   const [{ data: roles }, { data: permissions }, { data: mappings }] = await Promise.all([
@@ -45,9 +58,10 @@ export default async function AdminRolesPage() {
           </thead>
           <tbody>
             {(roles ?? []).map((role) => {
-              const schoolName = Array.isArray((role as any).schools)
-                ? (role as any).schools[0]?.name
-                : (role as any).schools?.name;
+              const typedRole = role as AdminRoleRow;
+              const schoolName = Array.isArray(typedRole.schools)
+                ? typedRole.schools[0]?.name
+                : typedRole.schools?.name;
               const permissionNames = (rolePermissionMap.get(String(role.id)) ?? []).map((permissionId) => {
                 const permission = permissionMap.get(permissionId);
                 return permission ? `${permission.resource}:${permission.action}` : "unknown";

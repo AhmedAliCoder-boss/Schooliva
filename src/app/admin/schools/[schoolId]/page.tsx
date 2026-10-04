@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { activateSchoolLifecycle, createSchoolUser, resetSchoolUserPassword, saveSchoolBranding, toggleSchoolUserStatus } from "@/app/actions/admin";
+import { activateSchoolLifecycle, createSchoolUser, resetSchoolUserPassword, toggleSchoolUserStatus } from "@/app/actions/admin";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { buildBrandingTheme } from "@/lib/school-branding";
+import { SchoolBrandingEditor } from "@/components/admin/school-branding-editor";
+import { buildBrandingTheme, getSchoolBrandingForSchool } from "@/lib/school-branding";
 import { resolveSchoolLifecycle } from "@/lib/school-lifecycle";
 import { createClient } from "@/lib/supabase/server";
 import { isMasterAdminUser } from "@/lib/auth/roles";
@@ -19,7 +20,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
   const { data: school } = await supabase.from("schools").select("id,name,code,email,phone,address,city,state,country,is_active,created_at").eq("id", schoolId).maybeSingle();
   if (!school) redirect("/admin/schools");
 
-  const { data: brandingRecord } = await supabase.from("school_branding").select("primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode").eq("school_id", schoolId).maybeSingle();
+  const { data: brandingRecord } = await supabase.from("school_branding").select("primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode,logo_path").eq("school_id", schoolId).maybeSingle();
   const brandingTheme = brandingRecord ? buildBrandingTheme({
     primaryColor: brandingRecord.primary_color,
     secondaryColor: brandingRecord.secondary_color,
@@ -35,6 +36,22 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
     infoColor: brandingRecord.info_color,
     themeMode: brandingRecord.theme_mode,
   }) : undefined;
+  const brandingFormTheme = brandingTheme ?? buildBrandingTheme({
+    primaryColor: "#2563eb",
+    secondaryColor: "#0f172a",
+    accentColor: "#f59e0b",
+    backgroundColor: "#f8fafc",
+    foregroundColor: "#0f172a",
+    cardColor: "#ffffff",
+    mutedColor: "#64748b",
+    borderColor: "#dfe7ee",
+    successColor: "#16a34a",
+    warningColor: "#f59e0b",
+    destructiveColor: "#dc2626",
+    infoColor: "#2563eb",
+    themeMode: "light",
+  });
+  const brandingProfile = await getSchoolBrandingForSchool(supabase, schoolId);
 
   const [{ data: memberships }, { data: students }, { data: teachers }, { data: documents }, { data: contracts }, { data: trials }] = await Promise.all([
     supabase.from("user_roles").select("user_id,created_at,role_id,roles(name,slug)").eq("school_id", schoolId),
@@ -64,7 +81,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
   }
 
     return (
-    <AdminShell title={school.name} description="A controlled view of this tenant. School-specific actions stay scoped to the selected school." breadcrumbs={[{ label: "Schools", href: "/admin/schools" }, { label: school.name }]} schoolContext={school.name}>
+    <AdminShell title={school.name} description="A controlled view of this tenant. School-specific actions stay scoped to the selected school." breadcrumbs={[{ label: "Schools", href: "/admin/schools" }, { label: school.name }]} schoolContext={school.name} brandingTheme={brandingTheme}>
       <section className="admin-toolbar"><div><span className="admin-toolbar__count">School management</span><span className="admin-toolbar__hint">{school.code} · {school.is_active ? "Active tenant" : "Inactive tenant"}</span></div><Link href={`/admin/schools/${schoolId}/dashboard`} className="admin-button admin-button--primary">Open School Dashboard →</Link></section>
       <section className="admin-kpi-grid">
         <article className="admin-kpi"><span>Total accounts</span><strong>{String((memberships ?? []).length)}</strong><small>Selected school</small></article>
@@ -160,21 +177,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
         <div className="dashboard-card-heading">
           <div><span className="dashboard-panel-kicker">Branding & appearance</span><h2>School identity</h2></div>
         </div>
-        <form action={saveSchoolBranding} className="student-form" style={{ marginTop: 12 }}>
-          <input type="hidden" name="schoolId" value={schoolId} />
-          <div className="student-form-grid">
-            <label className="student-field">Primary color<input type="color" name="primaryColor" defaultValue={brandingTheme?.primaryColor ?? "#2563eb"} /></label>
-            <label className="student-field">Secondary color<input type="color" name="secondaryColor" defaultValue={brandingTheme?.secondaryColor ?? "#0f172a"} /></label>
-            <label className="student-field">Accent color<input type="color" name="accentColor" defaultValue={brandingTheme?.accentColor ?? "#f59e0b"} /></label>
-            <label className="student-field">Background color<input type="color" name="backgroundColor" defaultValue={brandingTheme?.backgroundColor ?? "#f8fafc"} /></label>
-            <label className="student-field">Foreground color<input type="color" name="foregroundColor" defaultValue={brandingTheme?.foregroundColor ?? "#0f172a"} /></label>
-            <label className="student-field">Card color<input type="color" name="cardColor" defaultValue={brandingTheme?.cardColor ?? "#ffffff"} /></label>
-            <label className="student-field">Muted color<input type="color" name="mutedColor" defaultValue={brandingTheme?.mutedColor ?? "#64748b"} /></label>
-            <label className="student-field">Border color<input type="color" name="borderColor" defaultValue={brandingTheme?.borderColor ?? "#dfe7ee"} /></label>
-            <label className="student-field">Theme<select name="themeMode" defaultValue={brandingTheme?.themeMode ?? "light"}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></label>
-          </div>
-          <button type="submit" className="dashboard-action dashboard-action--primary">Save branding</button>
-        </form>
+        <SchoolBrandingEditor schoolId={schoolId} schoolName={school.name} initialTheme={brandingFormTheme} logoUrl={brandingProfile?.logoUrl ?? null} />
       </section>
 
       <section className="admin-panel" style={{ marginTop: 24 }}>
@@ -198,7 +201,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
           <input type="hidden" name="trialId" value={activeTrial?.id ?? ""} />
           <div className="student-form-grid">
             <label className="student-field">Plan name<input name="planName" defaultValue={activeContract?.plan_name ?? "Starter"} required /></label>
-            <label className="student-field">Contract number<input name="contractNumber" defaultValue={activeContract?.contract_number ?? `CT-${Date.now()}`} required /></label>
+            <label className="student-field">Contract number<input name="contractNumber" defaultValue={activeContract?.contract_number ?? "CT-NEW"} required /></label>
             <label className="student-field">Monthly amount<input type="number" name="monthlyAmount" step="0.01" min="0" defaultValue={Number(activeContract?.monthly_amount ?? 0)} /></label>
           </div>
           <button type="submit" className="dashboard-action dashboard-action--primary">Activate school lifecycle</button>

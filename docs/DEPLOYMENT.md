@@ -50,13 +50,13 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-6. Review the migration output and confirm all migrations are applied in order.
+6. Review the migration output and confirm all migrations are applied in order. The Admissions module requires both `20261005000100_admissions_module.sql` and `20261005000200_admissions_workflows.sql`; deploy them before opening Admissions, or the API will report that `public.admissions` is missing from the schema cache.
 7. Run `supabase test db` after installing the CLI and pgTAP support. The Phase 27 and Phase 29 database tests check RLS, integrity, and storage configuration.
 8. Create separate production verification users for administrator, teacher, parent, student, accountant, librarian, transport manager, and inventory manager workflows. Do not reuse real user accounts.
 
 ## Storage verification
 
-Storage buckets must remain private. The migrations create private buckets for assignment files, submissions, leave attachments, private documents, and generated certificates. Run [phase29_deployment.sql](../supabase/tests/phase29_deployment.sql) and manually verify:
+Storage buckets must remain private. The migrations create private buckets for assignment files, submissions, leave attachments, admission documents, private documents, and generated certificates. Run [phase29_deployment.sql](../supabase/tests/phase29_deployment.sql) and manually verify:
 
 - unauthenticated downloads fail
 - a file owner can access only their permitted file
@@ -93,7 +93,7 @@ Run the Playwright suite against the deployed preview with `npm run test:e2e` an
 - [ ] RLS and RBAC integration tests pass with separate schools
 - [ ] storage bucket and object policy checks pass
 - [ ] sign-in, recovery, sign-out, and protected redirects work
-- [ ] student, parent, teacher, accountant, finance, attendance, timetable, exams, results, homework, library, transport, inventory, notifications, documents, and reports workflows pass
+- [ ] student, parent, teacher, accountant, finance, admissions, attendance, timetable, exams, results, homework, library, transport, inventory, notifications, documents, and reports workflows pass
 - [ ] backups and recovery owner are assigned
 - [ ] monitoring, error reporting, and rollback plan are documented
 - [ ] production smoke test passes over HTTPS

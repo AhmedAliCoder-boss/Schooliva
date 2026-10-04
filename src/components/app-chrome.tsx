@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,7 +18,7 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppChrome({ children }: { children: React.ReactNode }) {
+export function AppChrome({ children, schoolLogoUrl }: { children: React.ReactNode; schoolLogoUrl: string | null }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,14 +38,17 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     <div className="app-chrome">
       <button type="button" className="app-chrome__mobile-toggle" aria-label="Open navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}>
         <span aria-hidden="true">&#9776;</span>
-        <img src="/brand/logo.png" alt="Schooliva" />
+        {schoolLogoUrl
+          ? <img src={schoolLogoUrl} alt="School logo" width={110} height={24} />
+          : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={110} height={24} />}
       </button>
       <button type="button" className={`app-chrome__overlay ${sidebarOpen ? "is-visible" : ""}`} aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />
       <aside className={`schooliva-sidebar ${sidebarOpen ? "is-open" : ""}`} aria-label="Main navigation">
         <div className="schooliva-sidebar__top">
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
-            <span className="schooliva-brand__mark">S</span>
-            <span className="schooliva-brand__word">schooliva</span>
+            {schoolLogoUrl
+              ? <img src={schoolLogoUrl} alt="School logo" width={170} height={36} className="schooliva-brand__logo" />
+              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority />}
           </Link>
           <span aria-hidden="true" />
         </div>

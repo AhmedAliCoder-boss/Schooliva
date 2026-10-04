@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { RegisterPwa } from "@/components/pwa/register-pwa";
 import { AppChrome } from "@/components/app-chrome";
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
+import { buildBrandingCssVars, getSchoolBrandingForSchool } from "@/lib/school-branding";
+import { createClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,12 +30,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/brand/logo.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/landscape_logo.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
       { url: "/icons/icon-512.svg", sizes: "512x512", type: "image/svg+xml" },
     ],
     apple: [
-      { url: "/brand/logo.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/landscape_logo.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
     ],
   },
@@ -45,16 +48,24 @@ export const viewport: Viewport = {
   themeColor: "#1f5b4e",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const activeSchoolContext = user ? await getActiveSchoolContext(supabase, user.id) : null;
+  const brandingProfile = activeSchoolContext?.schoolId
+    ? await getSchoolBrandingForSchool(supabase, activeSchoolContext.schoolId)
+    : null;
+  const brandingStyle = brandingProfile?.theme ? buildBrandingCssVars(brandingProfile.theme) : undefined;
+
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" style={brandingStyle}>
         <RegisterPwa />
-        <AppChrome>{children}</AppChrome>
+        <AppChrome schoolLogoUrl={brandingProfile?.logoUrl ?? null}>{children}</AppChrome>
       </body>
     </html>
   );

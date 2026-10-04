@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,6 +19,7 @@ export const navGroups = [
   {
     title: "Academics",
     items: [
+      { label: "Admissions", href: "/admissions", icon: "admissions" },
       { label: "Students", href: "/students", icon: "students" },
       { label: "Teachers", href: "/teachers", icon: "teachers" },
       { label: "Attendance", href: "/attendance", icon: "attendance" },
@@ -68,6 +70,8 @@ export function NavIcon({ name }: { name: string }) {
   switch (name) {
     case "dashboard":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 13.5h7V4H4zm9 6.5h7V11h-7zm0-16v6.5H20V4zM4 20h7v-6.5H4z" /></svg>;
+    case "admissions":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M7 4.5h10l3 3V18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Zm8 0v3h3M8 11h8M8 15h6" /></svg>;
     case "students":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 18c0-2.2 2.7-3.5 6-3.5s6 1.3 6 3.5v1H4zm13 0c.4-1.3 2.4-2.3 5-2.7v-1.3c-1.7.3-3.3 1.2-4.5 2.5-.3.3-.5.7-.7 1.1z" /></svg>;
     case "teachers":
@@ -130,6 +134,7 @@ export function SchoolivaShell({
   schoolContext,
   schoolContextAction,
   brandingTheme,
+  schoolLogoUrl,
   children,
 }: {
   title: string;
@@ -145,6 +150,7 @@ export function SchoolivaShell({
   schoolContext?: string;
   schoolContextAction?: React.ReactNode;
   brandingTheme?: BrandingTheme;
+  schoolLogoUrl?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -178,8 +184,9 @@ export function SchoolivaShell({
       {!hideSidebar && <aside className={`schooliva-sidebar ${compact ? "is-compact" : ""} ${sidebarOpen ? "is-open" : ""}`}>
         <div className="schooliva-sidebar__top">
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
-            <span className="schooliva-brand__mark">S</span>
-            <span className="schooliva-brand__word">schooliva</span>
+            {schoolLogoUrl
+              ? <img src={schoolLogoUrl} alt={schoolContext ?? "School logo"} className="schooliva-brand__logo" />
+              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority />}
           </Link>
           <button
             type="button"
@@ -242,7 +249,7 @@ export function SchoolivaShell({
               {unreadNotifications > 0 && <b>{unreadNotifications > 9 ? "9+" : unreadNotifications}</b>}
             </Link>
             <Link href="/profile" className="schooliva-user" aria-label="View profile">
-              <span className="schooliva-user__avatar"><img src="/brand/logo.png" alt="" /></span>
+              <span className="schooliva-user__avatar"><Image src="/brand/landscape_logo.png" alt="" width={28} height={28} /></span>
               <span className="schooliva-user__meta">
                 <strong>{userName}</strong>
                 <small>{userRole}</small>

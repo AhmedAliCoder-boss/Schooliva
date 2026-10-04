@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { NavIcon } from "@/components/schooliva-shell";
+import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
 
 const groups = [
   { title: "MASTER ADMIN", items: [{ label: "Overview", href: "/admin", icon: "dashboard" }] },
@@ -19,13 +21,14 @@ function activePath(pathname: string, href: string) {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminShell({ children, title, description, breadcrumbs = [], schoolContext }: { children: React.ReactNode; title: string; description?: string; breadcrumbs?: Array<{ label: string; href?: string }>; schoolContext?: string }) {
+export function AdminShell({ children, title, description, breadcrumbs = [], schoolContext, brandingTheme }: { children: React.ReactNode; title: string; description?: string; breadcrumbs?: Array<{ label: string; href?: string }>; schoolContext?: string; brandingTheme?: BrandingTheme }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  return <div className="admin-shell">
+  const shellStyle = brandingTheme ? buildBrandingCssVars(brandingTheme) : undefined;
+  return <div className="admin-shell" style={shellStyle}>
     <button className={`admin-overlay ${open ? "is-visible" : ""}`} aria-label="Close admin navigation" onClick={() => setOpen(false)} />
     <aside className={`admin-sidebar ${open ? "is-open" : ""}`}>
-      <div className="admin-sidebar__top"><Link href="/admin" className="admin-brand" onClick={() => setOpen(false)}><span className="admin-brand__mark">S</span><span><strong>schooliva</strong><small>platform control</small></span></Link><button className="admin-sidebar__close" aria-label="Close admin navigation" onClick={() => setOpen(false)}>×</button></div>
+      <div className="admin-sidebar__top"><Link href="/admin" className="admin-brand" onClick={() => setOpen(false)}><Image src="/brand/landscape_logo.png" alt="Schooliva" width={160} height={34} className="admin-brand__logo" priority /></Link><button className="admin-sidebar__close" aria-label="Close admin navigation" onClick={() => setOpen(false)}>×</button></div>
       <nav className="admin-nav" aria-label="Master Admin navigation">{groups.map((group) => <div className="admin-nav__group" key={group.title}><p>{group.title}</p>{group.items.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={`admin-nav__item ${activePath(pathname, item.href) ? "is-active" : ""}`}><NavIcon name={item.icon} /><span>{item.label}</span></Link>)}</div>)}</nav>
       <div className="admin-sidebar__footer"><Link href="/admin/schools">Select a school</Link><span>Master Admin access</span></div>
     </aside>
