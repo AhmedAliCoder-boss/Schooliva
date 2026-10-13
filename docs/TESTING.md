@@ -10,6 +10,7 @@ Run with `npm run test:unit`. These tests are deterministic and do not need Supa
 - upload MIME and size validation
 - fee structure, invoice, and payment schema validation
 - positive payment amounts, supported methods, UUIDs, and due-day bounds
+- SLC/TC student identity, certificate dates, leaving details, and fee status validation
 
 Unit tests belong in `tests/unit` and should cover pure validators, calculations, parsers, and view-model mapping.
 
@@ -73,9 +74,10 @@ Run with `npm run test:e2e`. Set `E2E_BASE_URL`, `E2E_USER_EMAIL`, and `E2E_USER
 | Students | form/schema mapping | parent/self/staff visibility | list, create, archive, profile |
 | Parents | relationship validation | linked-child-only access | parent child switcher |
 | Teachers | assignment mapping | class assignment scope | teacher workspace |
+| HRM | hiring, resignation/termination/warning request, review-decision, and effective-date schemas | request submission requires recruitment and employee-type manage permissions; only the school's School Admin or Principal may decide; approvals retain employee/history records and only resignation/termination revokes school roles | select an employee and inspect the full record and ID card; submit a resignation or termination with supporting document, then verify approval archives/revokes access; approve a warning and verify the employee remains active with access; verify rejection leaves employment unchanged |
 | Attendance | status/date validation | student/parent/teacher scope | record and review attendance |
 | Timetable | time/range validation | class/teacher/student scope | view timetable |
-| Exams | workflow transitions | published-results visibility | create, review, publish |
+| Exams and results | per-section schedule coverage and aggregate workflow status; unambiguous marks-guard variables; weighted report-card totals, class positions, 40% default pass marks, and published pass/fail/position-holder statistics | marks are limited to submitted sections; published-results visibility | submit, mark, review, and publish sections independently; search published exams and filter by academic session; verify overview statistics follow filters; search published students by name, ID, class, or section; open and print individual reports; verify an eight-subject report fits one A4 page |
 | Results | mark range calculations | parent/student visibility | published results |
 | Fees | invoice/payment schemas and totals | parent/student/accountant scope | invoice and payment flow |
 | Payments | positive amount/reference rules | duplicate and overpayment rejection | record payment |

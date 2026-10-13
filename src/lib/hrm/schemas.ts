@@ -44,6 +44,25 @@ export const interviewStatusSchema = z.object({
   status: z.enum(["completed", "cancelled"]),
 });
 
+export const employeeExitRequestSchema = z.object({
+  employeeId: z.string().uuid(),
+  employeeType: z.enum(["teacher", "staff"]),
+  actionType: z.enum(["resignation", "termination", "warning"]),
+  terminationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+    }, "Enter a valid termination date."),
+  reason: z.string().trim().min(3).max(500),
+  notes: z.string().trim().max(2000).optional().default(""),
+});
+
+export const employeeExitReviewSchema = z.object({
+  requestId: z.string().uuid(),
+  decision: z.enum(["approved", "rejected"]),
+  decisionNotes: z.string().trim().max(2000).optional().default(""),
+});
+
 export const hireSubjectAssignmentsSchema = z.object({
   candidateId: postgresUuid,
   employeeType: z.enum(["teacher", "staff"]),

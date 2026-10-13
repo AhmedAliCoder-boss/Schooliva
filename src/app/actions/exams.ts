@@ -29,100 +29,40 @@ export async function createExam(_: ExamFormState | undefined, formData: FormDat
   if (error) return { error: error.code === "23505" ? "Exam name already use ho raha hai." : "Exam create nahi ho saka." }; revalidatePath("/exams"); return { success: "Exam create ho gaya." };
 }
 
-const workflow: Record<string, string> = { draft: "submitted", submitted: "reviewed", reviewed: "published", published: "published" };
-
-async function checkScheduleReadiness(supabase: Awaited<ReturnType<typeof requireExamContext>>["supabase"], schoolId: string, examId: string): Promise<string | null> {
-  const { data: subjects, error: subjectsError } = await supabase.from("exam_subjects")
-    .select("id,class_id").eq("exam_id", examId).eq("school_id", schoolId);
-  if (subjectsError) {
-    console.error("Exam subjects could not be checked before submission.", subjectsError);
-    return "Exam subjects could not be verified. Refresh and try again.";
+export async function changeExamSectionStatus(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
+  const examId = String(formData.get("examId") ?? "");
+  const sectionId = String(formData.get("sectionId") ?? "");
+  const nextStatus = String(formData.get("nextStatus") ?? "");
+  if (!examId || !sectionId || !["submitted", "reviewed", "published"].includes(nextStatus)) {
+    return { error: "Exam section workflow request invalid hai." };
   }
-  if (!subjects?.length) return "Add at least one exam subject before submitting this exam.";
-
-  const classIds = [...new Set(subjects.map((subject) => subject.class_id))];
-  const { data: sections, error: sectionsError } = await supabase.from("sections")
-    .select("id,class_id").eq("school_id", schoolId).eq("status", "active").in("class_id", classIds);
-  if (sectionsError) {
-    console.error("Exam sections could not be checked before submission.", sectionsError);
-    return "Class sections could not be verified. Refresh and try again.";
-  }
-  const sectionRows = sections ?? [];
-  if (!sectionRows.length) return "Add an active section to each exam class before submitting.";
-
-  const { data: schedules, error: schedulesError } = await supabase.from("exam_schedules")
-    .select("exam_subject_id,section_id").eq("school_id", schoolId).in("exam_subject_id", subjects.map((subject) => subject.id));
-  if (schedulesError) {
-    console.error("Exam schedules could not be checked before submission.", schedulesError);
-    return "Exam timetable could not be verified. Refresh and try again.";
-  }
-  const covered = new Set((schedules ?? []).map((schedule) => `${schedule.exam_subject_id}:${schedule.section_id}`));
-  const missing = subjects.reduce((count, subject) => {
-    const classSections = sectionRows.filter((section) => section.class_id === subject.class_id);
-    if (!classSections.length) return count + 1;
-    return count + classSections.filter((section) => !covered.has(`${subject.id}:${section.id}`)).length;
-  }, 0);
-  return missing ? `Schedule every exam subject for each active section before submitting (${missing} paper${missing === 1 ? "" : "s"} remaining).` : null;
-}
-
-async function checkMarksReadiness(supabase: Awaited<ReturnType<typeof requireExamContext>>["supabase"], schoolId: string, examId: string): Promise<string | null> {
-  const [
-    { data: exam, error: examError },
-    { data: subjects, error: subjectsError },
-  ] = await Promise.all([
-    supabase.from("exams").select("academic_session_id").eq("id", examId).eq("school_id", schoolId).maybeSingle(),
-    supabase.from("exam_subjects").select("id,class_id").eq("exam_id", examId).eq("school_id", schoolId),
-  ]);
-  if (examError || subjectsError) {
-    console.error("Exam marks readiness could not be checked.", examError ?? subjectsError);
-    return "Exam marks could not be verified. Refresh and try again.";
-  }
-  if (!exam || !subjects?.length) return "Add exam subjects before reviewing results.";
-
-  const checks = await Promise.all(subjects.map(async (subject) => {
-    const [
-      { count: enrollmentCount, error: enrollmentError },
-      { count: marksCount, error: marksError },
-    ] = await Promise.all([
-      supabase.from("student_enrollments").select("student_id", { count: "exact", head: true })
-        .eq("school_id", schoolId).eq("academic_session_id", exam.academic_session_id)
-        .eq("class_id", subject.class_id).eq("status", "active"),
-      supabase.from("marks").select("id", { count: "exact", head: true })
-        .eq("school_id", schoolId).eq("exam_subject_id", subject.id),
-    ]);
-    return { subjectId: subject.id, enrollmentCount, marksCount, enrollmentError, marksError };
-  }));
-  const failedCheck = checks.find((check) => check.enrollmentError || check.marksError);
-  if (failedCheck) {
-    console.error("Exam marks counts could not be checked.", failedCheck.enrollmentError ?? failedCheck.marksError);
-    return "Student marks could not be verified. Refresh and try again.";
-  }
-  const missing = checks.reduce((sum, check) => sum + Math.max(0, (check.enrollmentCount ?? 0) - (check.marksCount ?? 0)), 0);
-  return missing ? `Enter marks for every enrolled student before continuing (${missing} result${missing === 1 ? "" : "s"} remaining).` : null;
-}
-
-export async function changeExamStatus(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const id = String(formData.get("id") ?? ""); const { supabase, schoolId } = await requireExamContext("manage");
-  if (!id) return { error: "Exam required hai." };
-  const { data: exam, error: examError } = await supabase.from("exams").select("status").eq("id", id).eq("school_id", schoolId).maybeSingle();
-  if (examError) {
-    console.error("Exam status could not be loaded.", examError);
-    return { error: "Exam status could not be verified. Refresh and try again." };
-  }
-  if (!exam) return { error: "Exam nahi mila." };
-  const next = workflow[String(exam.status)]; if (!next || next === String(exam.status)) return { error: "Exam workflow aage nahi badh sakta." };
-  const readinessError = exam.status === "draft"
-    ? await checkScheduleReadiness(supabase, schoolId, id)
-    : await checkMarksReadiness(supabase, schoolId, id);
-  if (readinessError) return { error: readinessError };
-  const { data: updated, error } = await supabase.from("exams").update({ status: next })
-    .eq("id", id).eq("school_id", schoolId).eq("status", exam.status).select("id").maybeSingle();
+  const { supabase, schoolId } = await requireExamContext("manage");
+  const { data: overallStatus, error } = await supabase.rpc("transition_exam_section_workflow", {
+    p_school_id: schoolId,
+    p_exam_id: examId,
+    p_section_id: sectionId,
+    p_next_status: nextStatus,
+  });
   if (error) {
-    console.error("Exam status transition failed.", error);
-    return { error: "Exam workflow could not be updated. Refresh and try again." };
+    const knownMessages = [
+      "Schedule every exam subject",
+      "Enter marks for every enrolled student",
+      "section is not part of this exam",
+      "section workflow must move",
+      "Only exam managers",
+    ];
+    if (knownMessages.some((message) => error.message.includes(message))) return { error: error.message };
+    console.error("Exam section workflow transition failed.", error);
+    return { error: "Exam section workflow could not be updated. Refresh and try again." };
   }
-  if (!updated) return { error: "Exam status changed in another request. Refresh and try again." };
-  revalidatePath("/exams"); revalidatePath(`/exams/${id}`); revalidatePath("/exams/timetable"); return { success: `Exam ${next} ho gaya.` };
+  revalidatePath("/exams");
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath("/exams/timetable");
+  return {
+    success: overallStatus === "published"
+      ? "All active sections are published. The exam is now complete."
+      : `Section ${nextStatus} ho gaya. Overall exam status: ${String(overallStatus ?? "pending")}.`,
+  };
 }
 
 export async function saveExamType(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
@@ -173,6 +113,7 @@ export async function saveExamSubject(_: ExamFormState | undefined, formData: Fo
       "active class",
       "active school subject",
       "already exists",
+      "section marking starts",
     ];
     if (knownMessages.some((message) => error.message.includes(message))) {
       return { error: error.message };
@@ -200,7 +141,14 @@ export async function removeExamSubject(_: ExamFormState | undefined, formData: 
     console.error("Exam status could not be checked before removing a subject.", examError);
     return { error: "Exam status could not be verified. Refresh and try again." };
   }
-  if (!exam || exam.status !== "draft") return { error: "Subjects can only be changed while the exam is a draft." };
+  if (!exam || exam.status !== "draft") return { error: "Subjects can only be changed before section marking starts." };
+  const { data: sectionWorkflows, error: workflowsError } = await supabase.from("exam_section_workflows")
+    .select("section_id").eq("exam_id", examId).eq("school_id", schoolId).limit(1);
+  if (workflowsError) {
+    console.error("Exam section progress could not be checked before removing a subject.", workflowsError);
+    return { error: "Exam section progress could not be verified. Refresh and try again." };
+  }
+  if (sectionWorkflows?.length) return { error: "Exam subjects are locked after the first section is submitted." };
   const { data: subject, error: subjectError } = await supabase.from("exam_subjects").select("id")
     .eq("id", id).eq("exam_id", examId).eq("school_id", schoolId).maybeSingle();
   if (subjectError) {
@@ -239,7 +187,7 @@ export async function saveExamSchedule(_: ExamFormState | undefined, formData: F
     return { error: "The selected exam subject and section could not be verified. Refresh and try again." };
   }
   if (!exam || !subject || !section || !term || !examiner || exam.status !== "draft") {
-    return { error: "Choose a draft exam, subject, section, term, and examiner from this school." };
+    return { error: "Choose an exam still being planned, subject, section, term, and examiner from this school." };
   }
   if (subject.class_id !== section.class_id) {
     return { error: "Choose a section that belongs to the selected exam subject's class." };
@@ -250,23 +198,6 @@ export async function saveExamSchedule(_: ExamFormState | undefined, formData: F
   if (parsed.data.scheduledOn < exam.starts_on || parsed.data.scheduledOn > exam.ends_on
     || parsed.data.scheduledOn < term.starts_on || parsed.data.scheduledOn > term.ends_on) {
     return { error: "The exam date must be within both the exam and academic-term dates." };
-  }
-  const { data: examinerAssignment, error: examinerAssignmentError } = await supabase.from("teacher_assignments")
-    .select("id")
-    .eq("school_id", schoolId)
-    .eq("academic_session_id", exam.academic_session_id)
-    .eq("teacher_id", parsed.data.examinerTeacherId)
-    .eq("subject_id", subject.subject_id)
-    .eq("assignment_type", "subject")
-    .or(`class_id.is.null,class_id.eq.${subject.class_id}`)
-    .limit(1)
-    .maybeSingle();
-  if (examinerAssignmentError) {
-    console.error("Examiner subject assignment could not be verified.", examinerAssignmentError);
-    return { error: "The examiner's subject assignment could not be verified. Refresh and try again." };
-  }
-  if (!examinerAssignment) {
-    return { error: "Choose a teacher assigned to this subject for the exam's academic session and class." };
   }
   const { error } = await supabase.from("exam_schedules").insert({
     school_id: schoolId,
@@ -281,6 +212,7 @@ export async function saveExamSchedule(_: ExamFormState | undefined, formData: F
   });
   if (error) {
     if (error.code === "23P01") return { error: "This examiner is already assigned to another exam at that time." };
+    if (error.message.includes("submitted for marking")) return { error: error.message };
     return { error: error.code === "23505" ? "Ye subject is section aur date par already schedule hai." : "Exam schedule add nahi hua." };
   }
   revalidatePath(`/exams/${examId}`);
@@ -293,7 +225,7 @@ export async function removeExamSchedule(_: ExamFormState | undefined, formData:
   const id = String(formData.get("id") ?? ""); const examId = String(formData.get("examId") ?? ""); if (!id) return { error: "Schedule required hai." };
   const { supabase, schoolId } = await requireExamContext("manage");
   const { data: schedule, error: scheduleError } = await supabase.from("exam_schedules")
-    .select("id,exam_subjects(exam_id)").eq("id", id).eq("school_id", schoolId).maybeSingle();
+    .select("id,section_id,exam_subjects(exam_id)").eq("id", id).eq("school_id", schoolId).maybeSingle();
   if (scheduleError) {
     console.error("Exam schedule could not be verified before removal.", scheduleError);
     return { error: "Exam schedule could not be verified. Refresh and try again." };
@@ -305,26 +237,34 @@ export async function removeExamSchedule(_: ExamFormState | undefined, formData:
     console.error("Exam status could not be checked before removing a schedule.", examError);
     return { error: "Exam status could not be verified. Refresh and try again." };
   }
-  if (!exam || exam.status !== "draft") return { error: "Schedules can only be changed while the exam is a draft." };
+  if (!exam || exam.status !== "draft") return { error: "Schedules can only be changed while the exam is being planned." };
   const { error } = await supabase.from("exam_schedules").delete().eq("id", id).eq("school_id", schoolId);
-  if (error) return { error: "Exam schedule remove nahi hua." }; revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); revalidatePath("/exams/timetable"); return { success: "Exam schedule remove ho gaya." };
+  if (error) {
+    if (error.message.includes("submitted for marking")) return { error: error.message };
+    return { error: "Exam schedule remove nahi hua." };
+  }
+  revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); revalidatePath("/exams/timetable"); return { success: "Exam schedule remove ho gaya." };
 }
 
 export async function submitMarks(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
   const rawRecords = String(formData.get("records") ?? "[]"); let records: unknown;
   try { records = JSON.parse(rawRecords); } catch { return { error: "Marks records invalid hain." }; }
-  const parsed = marksSubmissionSchema.safeParse({ examSubjectId: formData.get("examSubjectId"), records });
+  const parsed = marksSubmissionSchema.safeParse({
+    examSubjectId: formData.get("examSubjectId"),
+    sectionId: formData.get("sectionId"),
+    records,
+  });
   if (!parsed.success) return { error: "Marks form complete nahi hai." };
   const examId = String(formData.get("examId") ?? "");
   const { supabase, schoolId, user } = await requireGradingContext("manage");
-  const { data: subject, error: subjectError } = await supabase.from("exam_subjects").select("id,maximum_marks,class_id,exams(academic_session_id,status,grading_scale_id)").eq("id", parsed.data.examSubjectId).eq("school_id", schoolId).maybeSingle();
+  const { data: subject, error: subjectError } = await supabase.from("exam_subjects").select("id,exam_id,maximum_marks,class_id,exams(academic_session_id,status,grading_scale_id)").eq("id", parsed.data.examSubjectId).eq("school_id", schoolId).maybeSingle();
   const exam = Array.isArray(subject?.exams) ? subject.exams[0] : subject?.exams;
   if (subjectError) {
     console.error("Exam subject could not be loaded for marks entry.", subjectError);
     return { error: "Exam subject could not be verified. Refresh and try again." };
   }
   if (!subject || !exam) return { error: "Exam subject nahi mila." };
-  if (String(exam.status) !== "submitted") return { error: "Marks can only be entered while the exam is submitted for marking." };
+  if (String(subject.exam_id) !== examId) return { error: "Exam subject does not belong to this exam." };
   if (parsed.data.records.some((record) => record.obtainedMarks > Number(subject.maximum_marks))) {
     return { error: `Obtained marks cannot exceed ${subject.maximum_marks}.` };
   }
@@ -337,13 +277,41 @@ export async function submitMarks(_: ExamFormState | undefined, formData: FormDa
     return { error: "Grading scale could not be verified. Refresh and try again." };
   }
   const studentIds = parsed.data.records.map((record) => record.studentId);
-  const { data: enrollments, error: enrollmentError } = await supabase.from("student_enrollments").select("student_id").eq("school_id", schoolId).eq("class_id", subject.class_id).eq("academic_session_id", exam.academic_session_id).eq("status", "active").in("student_id", studentIds);
+  const { data: section, error: sectionError } = await supabase.from("sections").select("id,class_id")
+    .eq("id", parsed.data.sectionId).eq("school_id", schoolId).eq("status", "active").maybeSingle();
+  if (sectionError) {
+    console.error("Exam marking section could not be verified.", sectionError);
+    return { error: "Selected section could not be verified. Refresh and try again." };
+  }
+  if (!section || section.class_id !== subject.class_id) return { error: "Choose an active section in this exam subject's class." };
+  const [
+    { data: sectionWorkflow, error: workflowError },
+    { data: classSubjects, error: classSubjectsError },
+    { data: sectionSchedules, error: sectionSchedulesError },
+  ] = await Promise.all([
+    supabase.from("exam_section_workflows").select("status").eq("exam_id", examId)
+      .eq("school_id", schoolId).eq("section_id", section.id).maybeSingle(),
+    supabase.from("exam_subjects").select("id").eq("exam_id", examId).eq("school_id", schoolId).eq("class_id", subject.class_id),
+    supabase.from("exam_schedules").select("exam_subject_id").eq("school_id", schoolId).eq("section_id", section.id),
+  ]);
+  if (workflowError || classSubjectsError || sectionSchedulesError) {
+    console.error("Section paper coverage could not be verified for marks entry.", workflowError ?? classSubjectsError ?? sectionSchedulesError);
+    return { error: "Section exam coverage could not be verified. Refresh and try again." };
+  }
+  if (sectionWorkflow?.status !== "submitted") return { error: "Marks can only be entered while this section is submitted for marking." };
+  const scheduledSubjectIds = new Set((sectionSchedules ?? []).map((schedule) => schedule.exam_subject_id));
+  if (!classSubjects?.length || classSubjects.some((classSubject) => !scheduledSubjectIds.has(classSubject.id))) {
+    return { error: "Marks can only be entered for a section with every class exam subject scheduled." };
+  }
+  const { data: enrollments, error: enrollmentError } = await supabase.from("student_enrollments").select("student_id")
+    .eq("school_id", schoolId).eq("class_id", subject.class_id).eq("section_id", section.id)
+    .eq("academic_session_id", exam.academic_session_id).eq("status", "active").in("student_id", studentIds);
   if (enrollmentError) {
     console.error("Exam enrolments could not be verified for marks entry.", enrollmentError);
     return { error: "Student enrolments could not be verified. Refresh and try again." };
   }
   const validIds = new Set((enrollments ?? []).map((item) => item.student_id));
-  if (parsed.data.records.some((record) => !validIds.has(record.studentId))) return { error: "Is class ke enrolled students ke liye hi marks save ho sakte hain." };
+  if (parsed.data.records.some((record) => !validIds.has(record.studentId))) return { error: "Is section ke enrolled students ke liye hi marks save ho sakte hain." };
   const maximumMarks = Number(subject.maximum_marks);
   const rows = parsed.data.records.map((record) => {
     const percentage = Math.round((record.obtainedMarks / maximumMarks) * 10000) / 100;
@@ -361,5 +329,30 @@ export async function submitMarks(_: ExamFormState | undefined, formData: FormDa
     };
   });
   const { error } = await supabase.from("marks").upsert(rows, { onConflict: "exam_subject_id,student_id" });
-  if (error) return { error: "Marks save nahi ho sake." }; revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); return { success: `${rows.length} students ke marks save ho gaye.` };
+  if (error) {
+    console.error("Exam marks could not be saved.", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      examId,
+      examSubjectId: parsed.data.examSubjectId,
+      sectionId: section.id,
+      recordCount: rows.length,
+    });
+    if (error.message.includes("Exam marks require an active enrolment")) {
+      return { error: "Marks can only be saved for students actively enrolled in this submitted section." };
+    }
+    if (error.message.includes("Obtained marks cannot exceed maximum marks")) {
+      return { error: `Obtained marks cannot exceed ${subject.maximum_marks}.` };
+    }
+    if (error.message.includes("Published exam marks cannot be modified")) {
+      return { error: "Marks for a published exam cannot be changed." };
+    }
+    if (error.code === "42501") return { error: "You do not have permission to save marks for this school." };
+    return { error: `Marks save nahi ho sake (database error ${error.code || "unknown"}). Please try again; if it continues, share this error code with your administrator.` };
+  }
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath("/exams");
+  return { success: `${rows.length} students ke marks save ho gaye.` };
 }

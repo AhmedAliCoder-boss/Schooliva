@@ -18,16 +18,17 @@ export default async function FinancePrintPage({ params }: { params: Params }) {
 
   if (type === "invoice") {
     const [{ data: invoice, error }, { data: items, error: itemsError }] = await Promise.all([
-      supabase.from("fee_invoices").select("id,invoice_number,student_id,status,total,paid_amount,remaining_amount,due_date,discount,late_fee,notes,students(first_name,last_name,admission_number)").eq("id", id).eq("school_id", schoolId).maybeSingle(),
+      supabase.from("fee_invoices").select("id,invoice_number,student_id,status,total,paid_amount,remaining_amount,due_date,discount,late_fee,notes,students(first_name,last_name,admission_number,student_identifier)").eq("id", id).eq("school_id", schoolId).maybeSingle(),
       supabase.from("fee_invoice_items").select("fee_type,description,amount,is_optional").eq("invoice_id", id).eq("school_id", schoolId).order("created_at"),
     ]);
     if (error || itemsError) throw new Error("Invoice document could not be loaded.");
     if (!invoice) notFound();
     const student = Array.isArray(invoice.students) ? invoice.students[0] : invoice.students;
     return <main className="school-document-page"><div className="school-document-toolbar no-print"><Link href="/finance/invoices">Back to invoices</Link><PrintAction label="Print invoice / Save PDF" /></div>
-      <SchoolDocument school={school} title="Fee invoice" reference={String(invoice.invoice_number)}>
+      <SchoolDocument school={school} title="Fee invoice" reference={String(invoice.invoice_number)} className="school-document--invoice">
         <dl className="school-document__facts">
           <div><dt>Student</dt><dd>{[student?.first_name, student?.last_name].filter(Boolean).join(" ") || "Student"}</dd></div>
+          <div><dt>Student ID</dt><dd>{student?.student_identifier ?? "-"}</dd></div>
           <div><dt>Admission no.</dt><dd>{student?.admission_number ?? "-"}</dd></div>
           <div><dt>Due date</dt><dd>{String(invoice.due_date)}</dd></div>
           <div><dt>Status</dt><dd>{String(invoice.status).replaceAll("_", " ")}</dd></div>
@@ -55,12 +56,13 @@ export default async function FinancePrintPage({ params }: { params: Params }) {
     const { data: invoice, error: invoiceError } = await supabase.from("fee_invoices").select("invoice_number,student_id").eq("id", payment.invoice_id).eq("school_id", schoolId).maybeSingle();
     if (invoiceError) throw new Error("Payment invoice details could not be loaded.");
     if (!invoice) notFound();
-    const { data: student, error: studentError } = await supabase.from("students").select("first_name,last_name,admission_number").eq("school_id", schoolId).eq("id", invoice.student_id).maybeSingle();
+    const { data: student, error: studentError } = await supabase.from("students").select("first_name,last_name,admission_number,student_identifier").eq("school_id", schoolId).eq("id", invoice.student_id).maybeSingle();
     if (studentError) throw new Error("Payment student details could not be loaded.");
     return <main className="school-document-page"><div className="school-document-toolbar no-print"><Link href="/finance/payments">Back to payments</Link><PrintAction label="Print receipt / Save PDF" /></div>
       <SchoolDocument school={school} title="Fee payment receipt" reference={String(payment.payment_reference)}>
         <dl className="school-document__facts">
           <div><dt>Received from</dt><dd>{[student?.first_name, student?.last_name].filter(Boolean).join(" ") || "Student"}</dd></div>
+          <div><dt>Student ID</dt><dd>{student?.student_identifier ?? "-"}</dd></div>
           <div><dt>Admission no.</dt><dd>{student?.admission_number ?? "-"}</dd></div>
           <div><dt>Invoice</dt><dd>{invoice.invoice_number}</dd></div>
           <div><dt>Payment date</dt><dd>{String(payment.payment_date)}</dd></div>

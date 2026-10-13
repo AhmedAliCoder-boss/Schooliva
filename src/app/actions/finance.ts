@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { requireFinanceContext } from "@/lib/finance/context";
-import { expenseSchema, feeStructureSchema, invoiceSchema, paymentSchema, type FinanceFormState } from "@/lib/finance/schemas";
+import { formatInvoiceNumber } from "@/lib/finance/invoice-number";
+import {
+  expenseSchema,
+  feeStructureDeleteSchema,
+  feeStructureSchema,
+  feeStructureStatusSchema,
+  invoiceSchema,
+  paymentSchema,
+  type FinanceFormState,
+} from "@/lib/finance/schemas";
 
 function values(formData: FormData) {
   const result: Record<string, FormDataEntryValue | FormDataEntryValue[]> = {};
@@ -41,14 +50,117 @@ export async function saveFeeStructure(_: FinanceFormState | undefined, formData
   revalidateFinance(); return { success: "Fee structure add ho gaya." };
 }
 
+export async function setFeeStructureActive(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
+  const parsed = feeStructureStatusSchema.safeParse({
+    feeStructureId: formData.get("feeStructureId"),
+    isActive: formData.get("isActive"),
+  });
+  if (!parsed.success) return { error: "Fee structure status input is invalid." };
+  const { supabase, schoolId } = await requireFinanceContext("manage");
+  const { data, error } = await supabase.from("fee_structures")
+    .update({ is_active: parsed.data.isActive })
+    .eq("id", parsed.data.feeStructureId)
+    .eq("school_id", schoolId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("Fee structure status could not be updated.", error);
+    return { error: "Fee structure status could not be updated." };
+  }
+  if (!data) return { error: "Fee structure was not found in this school." };
+  revalidateFinance();
+  return { success: `Fee structure ${parsed.data.isActive ? "activated" : "deactivated"}.` };
+}
+
+export async function deleteFeeStructure(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
+  const parsed = feeStructureDeleteSchema.safeParse({ feeStructureId: formData.get("feeStructureId") });
+  if (!parsed.success) return { error: "Fee structure ID is invalid." };
+  const { supabase, schoolId } = await requireFinanceContext("manage");
+  const { count, error: usageError } = await supabase.from("fee_invoice_items")
+    .select("id", { count: "exact", head: true })
+    .eq("fee_structure_id", parsed.data.feeStructureId)
+    .eq("school_id", schoolId);
+  if (usageError) {
+    console.error("Fee structure invoice usage could not be checked.", usageError);
+    return { error: "Fee structure usage could not be verified. Please try again." };
+  }
+  if (count) return { error: "This fee structure is used on an invoice. Deactivate it instead of removing it." };
+
+  const { data, error } = await supabase.from("fee_structures")
+    .delete()
+    .eq("id", parsed.data.feeStructureId)
+    .eq("school_id", schoolId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "This fee structure is used on an invoice. Deactivate it instead of removing it." };
+    }
+    console.error("Fee structure could not be removed.", error);
+    return { error: "Fee structure could not be removed." };
+  }
+  if (!data) return { error: "Fee structure was not found in this school." };
+  revalidateFinance();
+  return { success: "Fee structure removed." };
+}
+
 export async function saveInvoice(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = invoiceSchema.safeParse(values(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invoice form invalid hai." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
-  const invoiceNumber = `INV-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const selected = parsed.data.feeStructureIds;
+  const [{ data: sessions, error: sessionsError }, { data: structures, error: structuresError }] = await Promise.all([
+    supabase.from("academic_sessions")
+      .select("id,status,is_current")
+      .eq("school_id", schoolId)
+      .order("starts_on", { ascending: false }),
+    supabase.from("fee_structures")
+      .select("id,academic_session_id,amount,fee_type")
+      .in("id", selected)
+      .eq("school_id", schoolId)
+      .eq("is_active", true),
+  ]);
+  if (sessionsError || structuresError) {
+    console.error("Invoice session or fee items could not be verified.", { sessionsError, structuresError });
+    return { error: "Invoice session or fee items could not be verified." };
+  }
+  if (structures?.length !== selected.length) {
+    return { error: "Selected fee items could not be verified. Refresh the page and try again." };
+  }
+
+  const requestedSession = sessions?.find((session) => session.id === parsed.data.academicSessionId);
+  const structureSessionIds = new Set((structures ?? []).map((structure) => String(structure.academic_session_id)));
+  const inferredStructureSession = structureSessionIds.size === 1
+    ? [...structureSessionIds][0]
+    : null;
+  const invoiceSession = requestedSession
+    ?? sessions?.find((session) => session.is_current)
+    ?? sessions?.find((session) => session.status === "active" && session.id === inferredStructureSession)
+    ?? sessions?.find((session) => session.status === "active")
+    ?? (sessions?.length === 1 ? sessions[0] : undefined);
+  if (!invoiceSession) return { error: "Create or activate an academic session before creating an invoice." };
+  if ([...structureSessionIds].some((id) => id !== invoiceSession.id)) {
+    return { error: "Selected fee items belong to a different academic session. Select the matching session and try again." };
+  }
+
+  const { data: invoiceSequence, error: sequenceError } = await supabase.rpc("next_fee_invoice_number", {
+    target_school_id: schoolId,
+  });
+  if (sequenceError) {
+    console.error("Invoice number could not be generated.", sequenceError);
+    return { error: "Invoice number could not be generated. Please try again." };
+  }
+
+  let invoiceNumber: string;
+  try {
+    invoiceNumber = formatInvoiceNumber(invoiceSequence);
+  } catch (error) {
+    console.error("Invoice number sequence returned an invalid value.", error);
+    return { error: "Invoice number could not be generated. Please contact support." };
+  }
   const { data: invoice, error: invoiceError } = await supabase.from("fee_invoices").insert({
     school_id: schoolId,
-    academic_session_id: parsed.data.academicSessionId,
+    academic_session_id: invoiceSession.id,
     student_id: parsed.data.studentId,
     invoice_number: invoiceNumber,
     due_date: parsed.data.dueDate,
@@ -57,13 +169,6 @@ export async function saveInvoice(_: FinanceFormState | undefined, formData: For
   }).select("id").single();
   if (invoiceError || !invoice) return { error: "Invoice create nahi ho saka." };
 
-  const selected = parsed.data.feeStructureIds;
-  const { data: structures, error: structuresError } = await supabase.from("fee_structures").select("id, amount, fee_type").in("id", selected).eq("school_id", schoolId).eq("is_active", true);
-  if (structuresError || structures?.length !== selected.length) {
-    const { error: cleanupError } = await supabase.from("fee_invoices").delete().eq("id", invoice.id).eq("school_id", schoolId);
-    if (cleanupError) return { error: "Selected fee items could not be verified, and the incomplete invoice could not be removed." };
-    return { error: "Selected fee items could not be verified. Refresh the page and try again." };
-  }
   const rows = structures.map((row) => ({
     school_id: schoolId,
     invoice_id: invoice.id,

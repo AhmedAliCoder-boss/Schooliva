@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { candidateStageSchema, hireSubjectAssignmentsSchema, interviewSchema, jobOpeningSchema } from "../../src/lib/hrm/schemas";
+import {
+  candidateStageSchema,
+  employeeExitRequestSchema,
+  employeeExitReviewSchema,
+  hireSubjectAssignmentsSchema,
+  interviewSchema,
+  jobOpeningSchema,
+} from "../../src/lib/hrm/schemas";
 
 describe("HRM recruitment validation", () => {
   it("requires a job title and validates supported employment and posting states", () => {
@@ -28,6 +35,36 @@ describe("HRM recruitment validation", () => {
       scheduledAt: "not-a-date",
       interviewType: "video",
     }).success).toBe(false);
+  });
+
+  it("validates employee exit request identity, date, reason, and notes", () => {
+    const request = {
+      employeeId: "d9428888-122b-4f71-bdf3-57db2058e358",
+      employeeType: "teacher",
+      actionType: "resignation",
+      terminationDate: "2026-10-12",
+      reason: "Resigned",
+      notes: "",
+    };
+    expect(employeeExitRequestSchema.safeParse(request).success).toBe(true);
+    expect(employeeExitRequestSchema.safeParse({ ...request, actionType: "warning" }).success).toBe(true);
+    expect(employeeExitRequestSchema.safeParse({ ...request, actionType: "dismissal" }).success).toBe(false);
+    expect(employeeExitRequestSchema.safeParse({ ...request, employeeType: "candidate" }).success).toBe(false);
+    expect(employeeExitRequestSchema.safeParse({ ...request, terminationDate: "2026-02-30" }).success).toBe(false);
+    expect(employeeExitRequestSchema.safeParse({ ...request, reason: "  " }).success).toBe(false);
+    expect(employeeExitRequestSchema.safeParse({ ...request, notes: "n".repeat(2001) }).success).toBe(false);
+  });
+
+  it("only accepts approval or rejection decisions for valid exit request IDs", () => {
+    const review = {
+      requestId: "d9428888-122b-4f71-bdf3-57db2058e358",
+      decision: "approved",
+      decisionNotes: "",
+    };
+    expect(employeeExitReviewSchema.safeParse(review).success).toBe(true);
+    expect(employeeExitReviewSchema.safeParse({ ...review, decision: "pending" }).success).toBe(false);
+    expect(employeeExitReviewSchema.safeParse({ ...review, requestId: "not-a-uuid" }).success).toBe(false);
+    expect(employeeExitReviewSchema.safeParse({ ...review, decisionNotes: "n".repeat(2001) }).success).toBe(false);
   });
 
   it("requires teacher hires to select a session and one or more unique subject assignments", () => {

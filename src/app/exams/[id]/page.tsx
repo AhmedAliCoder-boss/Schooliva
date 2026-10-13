@@ -2,22 +2,24 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ExamContentFilter } from "@/components/exams/exam-content-filter";
-import { ExamStatusForm, ExamSubjectForm, MarksEntryForm, RemoveExamSchedule, RemoveExamSubject } from "@/components/exams/exam-forms";
+import { ExamSectionWorkflowForm, ExamSubjectForm, MarksEntryForm, MarksRosterFilter, RemoveExamSchedule, RemoveExamSubject } from "@/components/exams/exam-forms";
 import { requireExamContext } from "@/lib/exams/context";
+import { getExamWorkflowProgress, getFullyScheduledSectionIds, type ExamSectionWorkflowStatus } from "@/lib/exams/schedule-coverage";
+import { getEffectivePassingMarks } from "@/lib/results/report-card";
 
 function relation<T>(value: unknown): T | null {
   return Array.isArray(value) ? (value[0] ?? null) as T | null : value as T | null;
 }
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ subject?: string; classId?: string; sectionId?: string }>;
+type SearchParams = Promise<{ subject?: string; classId?: string; sectionId?: string; markSectionId?: string }>;
 type Row = Record<string, unknown>;
 
 const workflow = [
-  { id: "draft", title: "Plan", description: "Set subjects and schedule every paper." },
-  { id: "submitted", title: "Mark", description: "Enter scores for enrolled students." },
-  { id: "reviewed", title: "Review", description: "Check completeness before publishing." },
-  { id: "published", title: "Publish", description: "Release final, locked results." },
+  { id: "draft", title: "Plan", description: "Schedule papers for every active section." },
+  { id: "submitted", title: "Mark", description: "Mark each section independently." },
+  { id: "reviewed", title: "Review", description: "Review all marks in each section." },
+  { id: "published", title: "Publish", description: "Complete only when every section is published." },
 ];
 
 export default async function ExamDetailPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
@@ -67,6 +69,18 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
   }
 
   const schedules = (scheduleRows ?? []) as Row[];
+  const { data: sectionWorkflowRows, error: sectionWorkflowError } = await supabase.from("exam_section_workflows")
+    .select("section_id,status").eq("exam_id", id).eq("school_id", schoolId);
+  if (sectionWorkflowError) {
+    console.error("Exam section workflow could not be loaded.", sectionWorkflowError);
+    return <main className="students-shell"><p className="auth-error">Section marking progress could not be loaded. Refresh and try again.</p></main>;
+  }
+  const sectionWorkflow = new Map((sectionWorkflowRows ?? []).map((item) => [String(item.section_id), String(item.status)]));
+  const fullyScheduledSectionIds = getFullyScheduledSectionIds(
+    subjects.map((subject) => ({ id: String(subject.id), class_id: String(subject.class_id) })),
+    sections.map((section) => ({ id: String(section.id), class_id: String(section.class_id) })),
+    schedules.map((schedule) => ({ exam_subject_id: String(schedule.exam_subject_id), section_id: String(schedule.section_id) })),
+  );
   const selectedClassId = query.classId && classRows?.some((item) => item.id === query.classId) ? query.classId : "";
   const selectedSectionId = query.sectionId && sections.some((item) => item.id === query.sectionId && item.class_id === selectedClassId)
     ? query.sectionId
@@ -84,14 +98,41 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
   const status = String(record.status);
   const published = status === "published";
   const draft = status === "draft";
-  const selectedSubject = subjects.find((item) => String(item.id) === query.subject);
-  let students: Array<{ id: string; name: string; admissionNumber: string; maximumMarks: number; existing?: { obtainedMarks?: number | null; grade?: string | null; remarks?: string | null } }> = [];
+  const examClassIds = new Set(subjects.map((subject) => String(subject.class_id)));
+  const examSections = sections.filter((section) => examClassIds.has(String(section.class_id)));
+  const workflowProgress = getExamWorkflowProgress(
+    examSections.map((section) => String(section.id)),
+    (sectionWorkflowRows ?? []).map((item) => ({
+      section_id: String(item.section_id),
+      status: String(item.status) as ExamSectionWorkflowStatus,
+    })),
+  );
+  const sectionProgressCounts = [
+    { stage: "submitted", count: workflowProgress.submitted },
+    { stage: "reviewed", count: workflowProgress.reviewed },
+    { stage: "published", count: workflowProgress.published },
+  ];
+  const hasSectionWorkflow = sectionWorkflow.size > 0;
+  const canEditExamContent = draft && !hasSectionWorkflow;
+  const hasMarkingSections = sectionProgressCounts.some((item) => item.count > 0);
+  const unpublishedSectionCount = workflowProgress.total - workflowProgress.published;
+  const queriedSubject = subjects.find((item) => String(item.id) === query.subject);
+  const markingSections = sections.filter((section) =>
+    fullyScheduledSectionIds.has(String(section.id))
+    && ["submitted", "reviewed", "published"].includes(sectionWorkflow.get(String(section.id)) ?? ""));
+  const selectedMarkSection = markingSections.find((section) => String(section.id) === query.markSectionId);
+  const selectedSubject = queriedSubject && selectedMarkSection
+    && String(queriedSubject.class_id) === String(selectedMarkSection.class_id)
+    ? queriedSubject
+    : undefined;
+  let students: Array<{ id: string; studentIdentifier: string; name: string; maximumMarks: number; existing?: { obtainedMarks?: number | null; grade?: string | null; remarks?: string | null } }> = [];
   let marksLoadError: string | null = null;
 
-  if (query.subject && selectedSubject) {
+  if (query.subject && selectedSubject && selectedMarkSection) {
     const [{ data: enrollments, error: enrollmentError }, { data: existingMarks, error: marksError }] = await Promise.all([
-      supabase.from("student_enrollments").select("student_id,students(first_name,middle_name,last_name,admission_number)")
+      supabase.from("student_enrollments").select("student_id,students(first_name,middle_name,last_name,student_identifier)")
         .eq("school_id", schoolId).eq("class_id", String(selectedSubject.class_id))
+        .eq("section_id", String(selectedMarkSection.id))
         .eq("academic_session_id", String(record.academic_session_id)).eq("status", "active"),
       supabase.from("marks").select("student_id,obtained_marks,grade,remarks")
         .eq("school_id", schoolId).eq("exam_subject_id", String(selectedSubject.id)),
@@ -102,12 +143,12 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
     } else {
       const markLookup = new Map((existingMarks ?? []).map((mark) => [String(mark.student_id), mark]));
       students = (enrollments ?? []).map((enrollment) => {
-        const student = relation<{ first_name: string; middle_name?: string | null; last_name: string; admission_number: string }>(enrollment.students);
+        const student = relation<{ first_name: string; middle_name?: string | null; last_name: string; student_identifier: string }>(enrollment.students);
         const mark = markLookup.get(String(enrollment.student_id));
         return {
           id: String(enrollment.student_id),
+          studentIdentifier: student?.student_identifier ?? "—",
           name: `${student?.first_name ?? ""} ${student?.middle_name ?? ""} ${student?.last_name ?? ""}`.trim(),
-          admissionNumber: student?.admission_number ?? "",
           maximumMarks: Number(selectedSubject.maximum_marks ?? 0),
           existing: mark ? { obtainedMarks: mark.obtained_marks, grade: mark.grade, remarks: mark.remarks } : undefined,
         };
@@ -131,7 +172,7 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
           <h1>{String(record.name)}</h1>
           <p>{session?.name ?? "Academic session"} · {String(record.starts_on)} – {String(record.ends_on)}{scale ? ` · ${scale.name}` : ""}</p>
         </div>
-        <span className={`status-pill ${status}`}>{status}</span>
+        <span className={`status-pill ${status}`}>{draft ? "pending" : status}</span>
       </section>
 
       <section aria-label="Exam workflow stages" className="exam-detail-workflow">
@@ -145,21 +186,36 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
         })}
       </section>
 
+      {published && <section className="setup-card exam-next-step">
+        <div>
+          <p className="eyebrow">Published results</p>
+          <h2>Individual student report cards</h2>
+          <p>Open each student&apos;s approved result and print a professional report card or save it as a PDF.</p>
+        </div>
+        <div className="exam-next-step__actions">
+          <Link className="exams-primary-link" href={`/results/${id}`}>View student results <span aria-hidden="true">→</span></Link>
+        </div>
+      </section>}
+
       {canManageExams === true && !published && <section className="setup-card exam-next-step">
         <div>
-          <p className="eyebrow">Next step · {draft ? "Exam setup" : status === "submitted" ? "Mark entry" : "Results"}</p>
-          <h2>{draft ? "Build and verify the exam timetable" : status === "submitted" ? "Enter student marks" : "Publish reviewed results"}</h2>
+          <p className="eyebrow">Next step · {draft ? "Exam setup and section progress" : status === "submitted" ? "Mark entry" : "Results"}</p>
+          <h2>{draft ? hasSectionWorkflow ? "Continue each section separately" : "Build and verify the exam timetable" : status === "submitted" ? "Enter student marks" : "Publish reviewed results"}</h2>
           <p>{draft
-            ? "Add every class subject, then schedule each paper for every active section before submitting."
+            ? hasSectionWorkflow
+              ? "A section can move through marking while other sections are still being scheduled. The overall exam remains pending until every active section is published."
+              : "Add every class subject, then schedule each paper in every active section. Each section can then progress independently."
             : status === "submitted"
-              ? "Enter a score for every student in each exam subject. Empty score fields remain untouched."
-              : "All enrolled students have results. Publishing locks this exam and its marks."}</p>
+              ? "Enter scores and review each section. The overall exam stays submitted until all sections complete review."
+              : "Publish each reviewed section. The overall exam is complete only after every active section is published."}</p>
+          {examSections.length > 0 && <p className="exams-inline-hint">
+            Section progress: {sectionProgressCounts.map((item) => `${item.count} ${item.stage}`).join(" · ")} · {unpublishedSectionCount} not published yet
+          </p>}
         </div>
         <div className="exam-next-step__actions">
           {draft && <Link className="exams-primary-link" href={`/exams/timetable?examId=${id}`}>Build exam timetable <span aria-hidden="true">→</span></Link>}
-          {status === "submitted" && examSubjects.length > 0 && <Link className="exams-primary-link" href={`#marks-entry`}>Continue to marks <span aria-hidden="true">↓</span></Link>}
+          {hasMarkingSections && examSubjects.length > 0 && <Link className="exams-primary-link" href={`#marks-entry`}>Continue to marks <span aria-hidden="true">↓</span></Link>}
           {schedules.length > 0 && <Link className="text-action" href={`/exams/${id}/print`}>Print timetable</Link>}
-          <ExamStatusForm id={id} status={status} />
         </div>
       </section>}
 
@@ -176,7 +232,7 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
           initialClassId={selectedClassId}
           initialSectionId={selectedSectionId}
         />
-        <p className="exams-inline-hint">Subjects come from the shared school catalog and may be reused across classes. Marks settings are saved per class, and each section gets its own paper schedule and examiner.</p>
+        <p className="exams-inline-hint">Subjects come from the shared school catalog and may be reused across classes. Marks settings are saved per class; blank passing marks use 40% of maximum marks. Each section gets its own paper schedule and examiner.</p>
         {contentClasses.length ? <div className="exam-class-drawers">
           {contentClasses.map((classItem) => {
             const classId = String(classItem.id);
@@ -191,14 +247,16 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
               <div className="exam-class-drawer__content">
                 <div className="student-table-wrap">
                   <table className="student-table">
-                    <thead><tr><th>Subject</th><th>Maximum marks</th><th>Passing marks</th>{canManageExams === true && draft && <th />}</tr></thead>
+                    <thead><tr><th>Subject</th><th>Maximum marks</th><th>Passing marks</th>{canManageExams === true && canEditExamContent && <th />}</tr></thead>
                     <tbody>{classSubjects.map((subject) => {
                       const subjectId = String(subject.id);
                       return <tr key={subjectId}>
                         <td><strong>{relation<{ name: string }>(subject.subjects)?.name ?? "—"}</strong><small>{relation<{ name: string; code?: string }>(subject.subjects)?.code ?? ""}</small></td>
                         <td>{String(subject.maximum_marks)}</td>
-                        <td>{String(subject.passing_marks ?? "—")}</td>
-                        {canManageExams === true && draft && <td><RemoveExamSubject id={subjectId} examId={id} /></td>}
+                        <td>{subject.passing_marks === null
+                          ? `${getEffectivePassingMarks(String(subject.maximum_marks), null)} (40% default)`
+                          : String(subject.passing_marks)}</td>
+                        {canManageExams === true && canEditExamContent && <td><RemoveExamSubject id={subjectId} examId={id} /></td>}
                       </tr>;
                     })}</tbody>
                   </table>
@@ -227,7 +285,7 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
                             <span className={scheduled ? "exam-section-paper__status is-scheduled" : "exam-section-paper__status"}>{scheduled ? "Scheduled" : "Pending"}</span>
                           </div>;
                         })}
-                        {draft && <Link className="text-action" href={`/exams/timetable?examId=${id}&classId=${classId}&sectionId=${sectionId}`}>Set timetable for this section →</Link>}
+                        {draft && !sectionWorkflow.has(sectionId) && <Link className="text-action" href={`/exams/timetable?examId=${id}&classId=${classId}&sectionId=${sectionId}`}>Set timetable for this section →</Link>}
                       </div>
                     </details>;
                   }) : <p className="exams-inline-hint">This class has no active sections. Add an active section before building the exam timetable.</p>}
@@ -236,13 +294,13 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
             </details>;
           })}
         </div> : <div className="student-empty"><h3>{selectedClassId ? "No saved exam content for this class" : "No exam subjects yet"}</h3><p>Add class subjects below. Saved exam content can then be loaded by class and reviewed section by section.</p></div>}
-        {canManageExams === true && draft
+        {canManageExams === true && canEditExamContent
           ? <ExamSubjectForm
               examId={id}
               classes={classRows ?? []}
               subjects={subjectCatalog ?? []}
             />
-          : <p className="exams-inline-hint">{draft ? "Only exam managers can change exam subjects." : "Exam subjects are locked once the exam has been submitted."}</p>}
+          : <p className="exams-inline-hint">{canManageExams !== true ? "Only exam managers can change exam subjects." : "Exam subjects are locked after the first section is submitted; finish scheduling the remaining sections."}</p>}
       </section>
 
       <section className="setup-card exam-schedule-section">
@@ -266,11 +324,13 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
               <div className="exam-class-drawer__content exam-schedule-drawers">
                 {classSections.filter((section) => !selectedSectionId || String(section.id) === selectedSectionId).map((section) => {
                   const sectionId = String(section.id);
+                  const sectionStatus = sectionWorkflow.get(sectionId) ?? "draft";
                   const sectionSchedules = schedules.filter((schedule) => String(schedule.section_id) === sectionId);
                   const scheduledSubjects = new Set(sectionSchedules.map((schedule) => String(schedule.exam_subject_id))).size;
+                  const readyToSubmit = classSubjects.length > 0 && scheduledSubjects === classSubjects.length;
                   return <details className="exam-section-drawer" key={sectionId} open={selectedSectionId === sectionId}>
                     <summary>
-                      <span><strong>{String(section.name)}</strong><small>{scheduledSubjects} scheduled {scheduledSubjects === 1 ? "paper" : "papers"} of {classSubjects.length}</small></span>
+                      <span><strong>{String(section.name)}</strong><small>{scheduledSubjects} scheduled {scheduledSubjects === 1 ? "paper" : "papers"} of {classSubjects.length} · {sectionStatus}</small></span>
                       <span className="exam-content-drawer__toggle" aria-hidden="true">⌄</span>
                     </summary>
                     <div className="exam-section-drawer__content">
@@ -281,11 +341,17 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
                         const examiner = relation<{ first_name: string; last_name: string }>(schedule.teachers);
                         return <div className="exam-section-paper" key={String(schedule.id)}>
                           <span><strong>{subjectName?.name ?? "Subject"}</strong><small>{String(schedule.scheduled_on)} · {String(schedule.starts_at).slice(0, 5)}–{String(schedule.ends_at).slice(0, 5)} · {term?.name ?? "Term"} · {examiner ? `${examiner.first_name} ${examiner.last_name}`.trim() : "No examiner"}{schedule.room ? ` · ${String(schedule.room)}` : ""}</small></span>
-                          {canManageExams === true && draft && <RemoveExamSchedule id={String(schedule.id)} examId={id} />}
+                          {canManageExams === true && draft && sectionStatus === "draft" && <RemoveExamSchedule id={String(schedule.id)} examId={id} />}
                         </div>;
                       }) : <p className="exams-inline-hint">No papers scheduled for this section yet.</p>}
                       {sectionSchedules.length > 0 && <Link className="exams-primary-link exam-section-print-link" href={`/exams/${id}/print?classId=${classId}&sectionId=${sectionId}`}>Load & print this timetable <span aria-hidden="true">→</span></Link>}
-                      {draft && <Link className="text-action" href={`/exams/timetable?examId=${id}&classId=${classId}&sectionId=${sectionId}`}>Open timetable builder →</Link>}
+                      {draft && sectionStatus === "draft" && <Link className="text-action" href={`/exams/timetable?examId=${id}&classId=${classId}&sectionId=${sectionId}`}>Open timetable builder →</Link>}
+                      {canManageExams === true && !published && <ExamSectionWorkflowForm
+                        examId={id}
+                        sectionId={sectionId}
+                        status={sectionStatus}
+                        readyToSubmit={readyToSubmit}
+                      />}
                     </div>
                   </details>;
                 })}
@@ -296,40 +362,49 @@ export default async function ExamDetailPage({ params, searchParams }: { params:
         </div> : <div className="student-empty"><h3>No papers scheduled yet</h3><p>Choose the class, section, academic term, date, and examiner for every subject.</p>
           {canManageExams === true && draft && <Link className="exams-primary-link" href={`/exams/timetable?examId=${id}`}>Start scheduling <span aria-hidden="true">→</span></Link>}
         </div>}
-        {!draft && <p className="exams-inline-hint">The timetable is locked after submission to keep marking aligned with the final schedule.</p>}
+        {!draft && <p className="exams-inline-hint">Each submitted section&apos;s timetable is locked. Other sections progress independently.</p>}
       </section>
 
       <section className="setup-card exam-marks-section" id="marks-entry">
         <div className="exams-section-heading">
           <div><p className="eyebrow">Step 3 · Grading</p><h2>Marks & review</h2></div>
-          <span>{status === "submitted" ? "Mark entry open" : status === "reviewed" || published ? "Read only" : "Available after timetable submission"}</span>
+          <span>{hasMarkingSections ? `${sectionProgressCounts.find((item) => item.stage === "submitted")?.count ?? 0} submitted · section-based marking` : "Available after section submission"}</span>
         </div>
-        {status === "draft" ? <div className="student-empty"><h3>Mark entry opens after submission</h3><p>Complete every exam paper in the timetable, then submit the exam to open marks entry.</p></div>
-          : status === "submitted" || status === "reviewed" || published ? <>
+        {!hasMarkingSections ? <div className="student-empty"><h3>Mark entry opens per section</h3><p>Schedule every exam subject in a section and submit that section. The overall exam remains pending until every active section completes publication.</p></div>
+          : <>
             {canManageGrading !== true && <p className="exams-inline-hint">You can view the exam workflow, but marks are only available to users with grading access.</p>}
             {canManageGrading === true && <>
-              <form className="attendance-filters" action={`/exams/${id}`} method="get">
-                <label>Exam subject
-                  <select name="subject" defaultValue={selectedSubject ? String(selectedSubject.id) : ""} required>
-                    <option value="">Select a subject</option>
-                    {examSubjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                </label>
-                <button type="submit">Load student roster</button>
-              </form>
+              <MarksRosterFilter
+                action={`/exams/${id}`}
+                subjects={examSubjects}
+                sections={markingSections.map((section) => ({
+                  id: String(section.id),
+                  name: String(section.name),
+                  classId: String(section.class_id),
+                  className: relation<{ name: string }>(classRows?.find((item) => item.id === section.class_id))?.name ?? "Class",
+                  status: sectionWorkflow.get(String(section.id)) ?? "submitted",
+                }))}
+                selectedSubjectId={selectedSubject ? String(selectedSubject.id) : ""}
+                selectedSectionId={selectedMarkSection ? String(selectedMarkSection.id) : ""}
+              />
               {marksLoadError ? <p className="student-error" role="alert">{marksLoadError}</p>
-                : query.subject && !selectedSubject ? <p className="student-error" role="alert">That subject does not belong to this exam.</p>
-                  : selectedSubject && students.length ? <MarksEntryForm
-                    key={String(selectedSubject.id)}
+                : !markingSections.length ? <p className="exams-inline-hint">No fully scheduled section has been submitted for marking yet.</p>
+                  : query.markSectionId && !selectedMarkSection ? <p className="student-error" role="alert">That section is not available for marks in this exam.</p>
+                    : query.subject && !queriedSubject ? <p className="student-error" role="alert">That subject does not belong to this exam.</p>
+                      : selectedMarkSection && queriedSubject && !selectedSubject ? <p className="student-error" role="alert">That subject does not belong to the selected section.</p>
+                      : !selectedMarkSection ? <p className="exams-inline-hint">Select a submitted section, then choose one of its exam subjects.</p>
+                      : selectedSubject && students.length ? <MarksEntryForm
+                    key={`${String(selectedSubject.id)}:${String(selectedMarkSection?.id)}`}
                     examId={id}
                     examSubjectId={String(selectedSubject.id)}
+                    sectionId={String(selectedMarkSection?.id)}
                     students={students}
-                    editable={status === "submitted"}
+                    editable={sectionWorkflow.get(String(selectedMarkSection?.id)) === "submitted"}
                   />
-                    : selectedSubject ? <div className="student-empty attendance-empty"><h3>No enrolled students</h3><p>No active students are enrolled in this subject&apos;s class for the exam session.</p></div>
+                    : selectedSubject && selectedMarkSection ? <div className="student-empty attendance-empty"><h3>No enrolled students</h3><p>No active students are enrolled in this section for the exam session.</p></div>
                       : <div className="student-empty attendance-empty"><h3>Select an exam subject</h3><p>The enrolled student roster and saved marks will load here.</p></div>}
             </>}
-          </> : null}
+          </>}
       </section>
     </main>
   );

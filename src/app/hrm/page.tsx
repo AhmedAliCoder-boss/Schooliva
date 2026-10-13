@@ -74,6 +74,9 @@ export default async function RecruitmentPage() {
           </li>;
         })}</ul> : <div className="student-empty"><h3>No interviews scheduled</h3><p>Schedule an interview from the interview calendar.</p></div>}
       </article>
+      <article className="finance-work-card finance-work-card--records">
+        <header className="finance-work-card__heading"><div><span className="dashboard-panel-kicker">Employee lifecycle</span><h2>Employee exits</h2><p>Submit resignation documents, review approvals, and retain employee history.</p></div><Link href="/hrm/exits">Open workflow →</Link></header>
+      </article>
     </section>
   </main>;
 }

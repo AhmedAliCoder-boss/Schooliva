@@ -49,8 +49,10 @@ export default async function HrmEmployeesPage({ searchParams }: { searchParams:
 
   return <main className="students-shell hrm-shell">
     <section className="module-page-header">
-      <div><p className="module-page-header__eyebrow">HRM / Employee records</p><h1>Employees.</h1>
+      <div className="module-page-header__row"><div><p className="module-page-header__eyebrow">HRM / Employee records</p><h1>Employees.</h1>
         <p>Teacher and staff records are created through the hiring workflow and managed here.</p></div>
+        <Link className="student-primary-action" href="/hrm/exits">Employee exits <span aria-hidden="true">→</span></Link>
+      </div>
     </section>
     <form className="student-filters">
       <label>Search<input name="search" defaultValue={search} placeholder="Name or employee code" /></label>

@@ -3,12 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { getActiveSchoolContext } from "@/lib/admin/school-context";
+import { requireUser } from "@/lib/auth/authorization";
 import { requireHrmContext } from "@/lib/hrm/context";
 import { isSupportedProfileImage } from "@/lib/security/profile-image";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   candidateSchema,
   candidateStageSchema,
+  employeeExitRequestSchema,
+  employeeExitReviewSchema,
   hireSubjectAssignmentsSchema,
   interviewSchema,
   interviewStatusSchema,
@@ -22,6 +26,10 @@ function values(formData: FormData) {
 
 function invalid(error: { flatten: () => { fieldErrors: Record<string, string[]> } }): HrmFormState {
   return { fieldErrors: error.flatten().fieldErrors };
+}
+
+function exitActionLabel(actionType: "resignation" | "termination" | "warning") {
+  return actionType === "resignation" ? "Resignation" : actionType === "termination" ? "Termination" : "Warning";
 }
 
 export async function updateEmployeeVerification(
@@ -153,6 +161,162 @@ export async function updateEmployeeVerification(
   revalidatePath(`/hrm/employees/${employeeType}/${employeeId}/id-card`);
   revalidatePath("/hrm/employees");
   return { success: isPhoto ? "Employee photo saved." : "Verification document uploaded for review." };
+}
+
+export async function requestHrmEmployeeExit(
+  _: HrmFormState | undefined,
+  formData: FormData,
+): Promise<HrmFormState> {
+  const document = formData.get("supportingDocument");
+  const employeeSelection = String(formData.get("employeeId") ?? "");
+  const separator = employeeSelection.indexOf(":");
+  const requestValues = {
+    ...values(formData),
+    employeeType: separator > 0 ? employeeSelection.slice(0, separator) : "",
+    employeeId: separator > 0 ? employeeSelection.slice(separator + 1) : "",
+  };
+  const parsed = employeeExitRequestSchema.safeParse(requestValues);
+  if (!parsed.success) return invalid(parsed.error);
+  if (parsed.data.terminationDate > new Date().toISOString().slice(0, 10)) {
+    return { error: "The effective date cannot be in the future." };
+  }
+  const requiresDocument = parsed.data.actionType !== "warning";
+  const supportingDocument = document instanceof File && document.size > 0 ? document : null;
+  const hasDocument = supportingDocument !== null;
+  if (typeof document === "string" && document.trim()) return { error: "Choose a valid supporting document." };
+  if (requiresDocument && !hasDocument) {
+    return { error: parsed.data.actionType === "resignation" ? "Upload the signed resignation letter." : "Upload the termination notice or supporting document." };
+  }
+  const extensionByType: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  if (hasDocument) {
+    if (!supportingDocument) return { error: "Choose a valid supporting document." };
+    if (supportingDocument.size > 5 * 1024 * 1024) return { error: "Supporting documents must be 5 MB or smaller." };
+    const extension = extensionByType[supportingDocument.type];
+    if (!extension) return { error: "Upload a PDF, JPEG, PNG, or WebP supporting document." };
+    if (supportingDocument.type === "application/pdf") {
+      const signature = new Uint8Array(await supportingDocument.slice(0, 5).arrayBuffer());
+      if (new TextDecoder().decode(signature) !== "%PDF-") return { error: "The uploaded file is not a valid PDF." };
+    } else if (!await isSupportedProfileImage(supportingDocument)) {
+      return { error: "The file content does not match its image type." };
+    }
+  }
+
+  const { employeeId, employeeType } = parsed.data;
+  const { supabase, schoolId } = await requireHrmContext("manage");
+  let storagePath: string | null = null;
+  if (hasDocument) {
+    if (!supportingDocument) return { error: "Choose a valid supporting document." };
+    const documentExtension = extensionByType[supportingDocument.type];
+    storagePath = `${schoolId}/${employeeType}/${employeeId}/${crypto.randomUUID()}.${documentExtension}`;
+    const { error: uploadError } = await supabase.storage.from("employee-resignations").upload(storagePath, supportingDocument, {
+      contentType: supportingDocument.type,
+      upsert: false,
+    });
+    if (uploadError) {
+      console.error("Employee exit document could not be uploaded.", uploadError);
+      return { error: "The supporting document could not be uploaded. Check your HRM access and try again." };
+    }
+  }
+
+  const { data, error } = await supabase.rpc("submit_hrm_employee_exit", {
+    p_school_id: schoolId,
+    p_employee_type: employeeType,
+    p_employee_id: employeeId,
+    p_action_type: parsed.data.actionType,
+    p_terminated_on: parsed.data.terminationDate,
+    p_reason: parsed.data.reason,
+    p_notes: parsed.data.notes || null,
+    p_resignation_file_path: storagePath,
+  });
+  if (error) {
+    console.error("Employee exit request could not be submitted.", error);
+    const { error: cleanupError } = storagePath
+      ? await supabase.storage.from("employee-resignations").remove([storagePath])
+      : { error: null };
+    if (cleanupError) console.error("Could not clean up an unlinked employee exit document.", cleanupError);
+    return { error: cleanupError
+      ? "The exit request failed and the uploaded letter could not be removed. Contact an administrator."
+      : error.message.includes("already terminated")
+        ? "This employee is already terminated."
+        : error.message.includes("duplicate key")
+          ? "An active exit request already exists for this employee."
+          : "The exit request could not be submitted. Verify employee and HRM permissions, then try again." };
+  }
+  if (!data) {
+    console.error("Employee exit request RPC returned no request ID.");
+    const { error: cleanupError } = storagePath
+      ? await supabase.storage.from("employee-resignations").remove([storagePath])
+      : { error: null };
+    if (cleanupError) console.error("Could not clean up an unlinked resignation letter.", cleanupError);
+    return { error: "The submitted request could not be confirmed. Refresh and check the exit workflow before retrying." };
+  }
+
+  revalidatePath("/hrm/exits");
+  revalidatePath("/hrm");
+  revalidatePath("/hrm/employees");
+  return { success: `${exitActionLabel(parsed.data.actionType)} request submitted to the School Admin or Principal for approval.` };
+}
+
+export async function reviewHrmEmployeeExit(
+  _: HrmFormState | undefined,
+  formData: FormData,
+): Promise<HrmFormState> {
+  const parsed = employeeExitReviewSchema.safeParse(values(formData));
+  if (!parsed.success) return invalid(parsed.error);
+
+  const current = await requireUser();
+  const { schoolId } = await getActiveSchoolContext(current.supabase, current.user.id);
+  if (!schoolId) return { error: "Select an active school before reviewing an exit request." };
+  const supabase = current.supabase;
+  const { data: request, error: requestError } = await supabase.from("hrm_employee_terminations")
+    .select("id,school_id,employee_type,action_type,teacher_id,staff_id")
+    .eq("id", parsed.data.requestId).eq("school_id", schoolId).eq("status", "pending").maybeSingle();
+  if (requestError || !request) {
+    if (requestError) console.error("Employee exit request could not be verified for review.", requestError);
+    return { error: "The pending exit request could not be verified. Refresh and try again." };
+  }
+
+  const { data: canReview, error: permissionError } = await supabase.rpc("can_review_hrm_employee_exit", {
+    p_school_id: schoolId,
+  });
+  if (permissionError || !canReview) {
+    if (permissionError) console.error("Employee exit reviewer permission could not be verified.", permissionError);
+    return { error: "Only this school's School Admin or Principal can approve or reject exit requests." };
+  }
+
+  const { data, error } = await supabase.rpc("review_hrm_employee_exit", {
+    p_request_id: parsed.data.requestId,
+    p_decision: parsed.data.decision,
+    p_decision_notes: parsed.data.decisionNotes || null,
+  });
+  if (error || !data) {
+    if (error) console.error("Employee exit decision could not be recorded.", error);
+    return { error: error?.message.includes("already been reviewed")
+      ? "This request has already been reviewed."
+      : "The exit decision could not be recorded. Confirm School Admin or Principal access, then retry." };
+  }
+
+  revalidatePath("/hrm/exits");
+  revalidatePath("/hrm/terminations");
+  revalidatePath("/hrm/employees");
+  revalidatePath("/hrm");
+  if (request.teacher_id) revalidatePath(`/teachers/${request.teacher_id}`);
+  if (request.staff_id) revalidatePath(`/staff/${request.staff_id}`);
+  if (parsed.data.decision === "approved") {
+    revalidatePath("/payroll");
+    revalidatePath("/timetable");
+    revalidatePath("/curriculum");
+  }
+  return { success: parsed.data.decision === "rejected"
+    ? `${exitActionLabel(request.action_type)} request rejected. The employee remains active.`
+    : request.action_type === "warning"
+      ? "Warning approved and recorded. The employee remains active and keeps school access."
+      : `${exitActionLabel(request.action_type)} approved. The employee is archived and school access has been revoked.` };
 }
 
 export async function reviewEmployeeVerificationDocument(

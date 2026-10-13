@@ -15,9 +15,9 @@ function EmptyState({ label, hint }: { label: string; hint: string }) {
 
 const workflowStages = [
   { id: "draft", title: "1. Plan", description: "Create an exam, assign class subjects, then build its timetable." },
-  { id: "submitted", title: "2. Mark", description: "Submit the complete timetable and enter student scores." },
-  { id: "reviewed", title: "3. Review", description: "Confirm every enrolled student has a result before publishing." },
-  { id: "published", title: "4. Publish", description: "Release the final results; published exams are locked." },
+  { id: "submitted", title: "2. Mark", description: "Submit each fully scheduled section and enter its students' scores." },
+  { id: "reviewed", title: "3. Review", description: "Review every section after all its enrolled students have marks." },
+  { id: "published", title: "4. Publish", description: "The exam is complete only after every active section is published." },
 ];
 
 export default async function ExamsPage() {
@@ -115,7 +115,7 @@ export default async function ExamsPage() {
                 <td>{type?.name ?? "—"}</td>
                 <td>{session?.name ?? "—"}</td>
                 <td>{String(exam.starts_on)} – {String(exam.ends_on)}</td>
-                <td><span className={`status-pill ${String(exam.status)}`}>{String(exam.status)}</span></td>
+                <td><span className={`status-pill ${String(exam.status)}`}>{exam.status === "draft" ? "pending" : String(exam.status)}</span></td>
                 <td><Link className="text-action" href={`/exams/${id}`}>Open workflow →</Link></td>
               </tr>;
             })}</tbody>

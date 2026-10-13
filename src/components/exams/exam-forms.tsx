@@ -1,7 +1,8 @@
 "use client";
 import { useActionState, useState } from "react";
+import type { KeyboardEvent } from "react";
 import Link from "next/link";
-import { addGradeBoundary, changeExamStatus, createExam, removeExamSchedule, removeExamSubject, saveExamSchedule, saveExamSubject, saveExamType, saveGradingScale, submitMarks } from "@/app/actions/exams";
+import { addGradeBoundary, changeExamSectionStatus, createExam, removeExamSchedule, removeExamSubject, saveExamSchedule, saveExamSubject, saveExamType, saveGradingScale, submitMarks } from "@/app/actions/exams";
 import { SubmitButton } from "@/components/auth/submit-button";
 import type { ExamFormState } from "@/lib/exams/schemas";
 type Option = { id: string; name: string };
@@ -40,6 +41,7 @@ export function ExamSubjectForm({ examId, classes, subjects }: {
         <TextField label="Maximum marks" name="maximumMarks" type="number" />
         <TextField label="Passing marks (optional)" name="passingMarks" type="number" required={false} />
       </div>
+      <p className="exams-inline-hint">Leave passing marks blank to use the default 40% of maximum marks.</p>
       {!classes.length
         ? <p className="exams-inline-hint">No active classes are available. Add a class in School Setup.</p>
         : !subjects.length
@@ -100,31 +102,130 @@ export function ExamScheduleForm({ examId, examSubjects, sections, terms, examin
 
 export function RemoveExamSchedule({ id, examId }: { id: string; examId: string }) { const [state, action] = useActionState(removeExamSchedule, undefined); return <form action={action} className="delete-form"><input type="hidden" name="id" value={id} /><input type="hidden" name="examId" value={examId} /><button type="submit">Remove</button>{state?.error && <span className="student-error">{state.error}</span>}</form>; }
 
-type MarkStudent = { id: string; name: string; admissionNumber: string; maximumMarks: number; existing?: { obtainedMarks?: number | null; grade?: string | null; remarks?: string | null } };
+type MarkStudent = { id: string; studentIdentifier: string; name: string; maximumMarks: number; existing?: { obtainedMarks?: number | null; grade?: string | null; remarks?: string | null } };
 
-export function MarksEntryForm({ examId, examSubjectId, students, editable }: { examId: string; examSubjectId: string; students: MarkStudent[]; editable: boolean }) {
+export function MarksRosterFilter({
+  action,
+  subjects,
+  sections,
+  selectedSubjectId,
+  selectedSectionId,
+}: {
+  action: string;
+  subjects: Array<Option & { classId: string }>;
+  sections: Array<Option & { classId: string; className: string; status: string }>;
+  selectedSubjectId: string;
+  selectedSectionId: string;
+}) {
+  const [subjectId, setSubjectId] = useState(selectedSubjectId);
+  const [sectionId, setSectionId] = useState(selectedSectionId);
+  const selectedSection = sections.find((section) => section.id === sectionId);
+  const classSubjects = subjects.filter((subject) => subject.classId === selectedSection?.classId);
+
+  return <form className="attendance-filters" action={action} method="get">
+    <label>Scheduled section
+      <select name="markSectionId" value={sectionId} required onChange={(event) => {
+        setSectionId(event.target.value);
+        setSubjectId("");
+      }}>
+        <option value="">Select a section submitted for marking</option>
+        {sections.map((section) => <option key={section.id} value={section.id}>{section.name} · {section.className} · {section.status}</option>)}
+      </select>
+    </label>
+    <label>Exam subject
+      <select name="subject" value={classSubjects.some((subject) => subject.id === subjectId) ? subjectId : ""}
+        required disabled={!selectedSection} onChange={(event) => setSubjectId(event.target.value)}>
+        <option value="">{selectedSection ? "Select a subject in this section" : "Select section first"}</option>
+        {classSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+      </select>
+    </label>
+    <button type="submit">Load student roster</button>
+  </form>;
+}
+
+export function MarksEntryForm({ examId, examSubjectId, sectionId, students, editable }: { examId: string; examSubjectId: string; sectionId: string; students: MarkStudent[]; editable: boolean }) {
   const [state, action] = useActionState(submitMarks, undefined);
   const [records, setRecords] = useState(students.map((student) => ({ studentId: student.id, obtainedMarks: String(student.existing?.obtainedMarks ?? ""), grade: student.existing?.grade ?? "", remarks: student.existing?.remarks ?? "" })));
   const update = (studentId: string, field: "obtainedMarks" | "grade" | "remarks", value: string) => setRecords((current) => current.map((record) => record.studentId === studentId ? { ...record, [field]: value } : record));
+  const moveMarkFocus = (form: HTMLFormElement, current: HTMLInputElement | null, rowDelta: number, columnDelta: number) => {
+    const row = current ? Number(current.dataset.markRow) : 0;
+    const column = current ? Number(current.dataset.markColumn) : 0;
+    const nextRow = row + rowDelta;
+    const nextColumn = column + columnDelta;
+    const nextInput = form.querySelector<HTMLInputElement>(
+      `[data-mark-navigation="true"][data-mark-row="${nextRow}"][data-mark-column="${nextColumn}"]:not(:disabled)`,
+    );
+    nextInput?.focus();
+  };
+  const handleMarkNavigation = (event: KeyboardEvent<HTMLInputElement>) => {
+    const directions: Record<string, [number, number]> = {
+      ArrowLeft: [0, -1],
+      ArrowRight: [0, 1],
+      ArrowUp: [-1, 0],
+      ArrowDown: [1, 0],
+      Enter: [1, 0],
+    };
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    if (event.currentTarget.form) {
+      moveMarkFocus(event.currentTarget.form, event.currentTarget, direction[0], direction[1]);
+    }
+  };
   const payload = records
     .filter((record) => record.obtainedMarks !== "")
     .map((record) => ({ studentId: record.studentId, obtainedMarks: Number(record.obtainedMarks), grade: record.grade, remarks: record.remarks }));
   return <form action={action} className="attendance-marker">
     <input type="hidden" name="examId" value={examId} />
     <input type="hidden" name="examSubjectId" value={examSubjectId} />
+    <input type="hidden" name="sectionId" value={sectionId} />
     <input type="hidden" name="records" value={JSON.stringify(payload)} />
     {state?.error && <p className="student-error" role="alert">{state.error}</p>}
     {state?.success && <p className="student-success" role="status">{state.success}</p>}
-    <div className="attendance-toolbar"><span>{students.length} enrolled students</span>{!editable && <span>Read only</span>}</div>
-    <div className="attendance-table-wrap"><table className="student-table"><thead><tr><th>Student</th><th>Admission</th><th>Obtained</th><th>Max</th><th>Grade (auto if blank)</th><th>Remarks</th></tr></thead><tbody>
-      {students.map((student) => {
+    <div className="attendance-toolbar">
+      <span>{students.length} enrolled students</span>
+      {!editable && <span>Read only</span>}
+    </div>
+    <div className="attendance-table-wrap"><table className="student-table"><thead><tr><th>Student</th><th>Student ID</th><th>Obtained</th><th>Max</th><th>Grade (auto if blank)</th><th>Remarks</th></tr></thead><tbody>
+      {students.map((student, rowIndex) => {
         const record = records.find((item) => item.studentId === student.id) ?? { studentId: student.id, obtainedMarks: "", grade: "", remarks: "" };
         return <tr key={student.id}>
-          <td><strong>{student.name}</strong></td><td>{student.admissionNumber}</td>
-          <td><input type="number" min="0" max={student.maximumMarks} step="0.01" disabled={!editable} value={record.obtainedMarks} onChange={(event) => update(student.id, "obtainedMarks", event.target.value)} /></td>
+          <td><strong>{student.name}</strong></td><td><strong>{student.studentIdentifier}</strong></td>
+          <td><input
+            type="number"
+            min="0"
+            max={student.maximumMarks}
+            step="0.01"
+            disabled={!editable}
+            data-mark-navigation="true"
+            data-mark-row={rowIndex}
+            data-mark-column={0}
+            value={record.obtainedMarks}
+            onChange={(event) => update(student.id, "obtainedMarks", event.target.value)}
+            onKeyDown={handleMarkNavigation}
+          /></td>
           <td>{student.maximumMarks}</td>
-          <td><input aria-label={`Grade for ${student.name}`} maxLength={20} disabled={!editable} value={record.grade} onChange={(event) => update(student.id, "grade", event.target.value)} /></td>
-          <td><input disabled={!editable} value={record.remarks} onChange={(event) => update(student.id, "remarks", event.target.value)} /></td>
+          <td><input
+            aria-label={`Grade for ${student.name}`}
+            maxLength={20}
+            disabled={!editable}
+            data-mark-navigation="true"
+            data-mark-row={rowIndex}
+            data-mark-column={1}
+            value={record.grade}
+            onChange={(event) => update(student.id, "grade", event.target.value)}
+            onKeyDown={handleMarkNavigation}
+          /></td>
+          <td><input
+            aria-label={`Remarks for ${student.name}`}
+            disabled={!editable}
+            data-mark-navigation="true"
+            data-mark-row={rowIndex}
+            data-mark-column={2}
+            value={record.remarks}
+            onChange={(event) => update(student.id, "remarks", event.target.value)}
+            onKeyDown={handleMarkNavigation}
+          /></td>
         </tr>;
       })}
     </tbody></table></div>
@@ -149,19 +250,35 @@ export function ExamForm({ types, sessions, scales }: { types: Option[]; session
   </form>;
 }
 
-export function ExamStatusForm({ id, status }: { id: string; status: string }) {
-  const [state, action] = useActionState(changeExamStatus, undefined);
+export function ExamSectionWorkflowForm({
+  examId,
+  sectionId,
+  status,
+  readyToSubmit,
+}: {
+  examId: string;
+  sectionId: string;
+  status: string;
+  readyToSubmit: boolean;
+}) {
+  const [state, action] = useActionState(changeExamSectionStatus, undefined);
   const stages: Record<string, { next: string; label: string; hint: string }> = {
-    draft: { next: "submitted", label: "Submit for marking", hint: "All subjects must be scheduled for every active class section." },
-    submitted: { next: "reviewed", label: "Complete review", hint: "Enter marks for every student enrolled in this exam session." },
-    reviewed: { next: "published", label: "Publish results", hint: "Publishing locks the exam and its marks." },
-    published: { next: "published", label: "Published", hint: "This exam and its results are read-only." },
+    draft: {
+      next: "submitted",
+      label: "Submit section for marking",
+      hint: readyToSubmit ? "This section has every scheduled paper." : "Schedule every exam subject in this section before submitting it.",
+    },
+    submitted: { next: "reviewed", label: "Complete section review", hint: "Enter marks for every enrolled student in this section before review." },
+    reviewed: { next: "published", label: "Publish section results", hint: "Publishing locks this section's results." },
+    published: { next: "published", label: "Section published", hint: "This section's results are final and read-only." },
   };
   const stage = stages[status] ?? stages.draft;
   return <form action={action} className="exam-status-action">
-    <input type="hidden" name="id" value={id} />
+    <input type="hidden" name="examId" value={examId} />
+    <input type="hidden" name="sectionId" value={sectionId} />
+    <input type="hidden" name="nextStatus" value={stage.next} />
     <p>{stage.hint}</p>
-    <button className="table-edit" disabled={status === "published"} type="submit">{stage.label}</button>
+    <button className="table-edit" disabled={status === "published" || (status === "draft" && !readyToSubmit)} type="submit">{stage.label}</button>
     {state?.error && <p className="student-error" role="alert">{state.error}</p>}
     {state?.success && <p className="student-success" role="status">{state.success}</p>}
   </form>;

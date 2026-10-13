@@ -12,7 +12,12 @@ export async function saveTeacher(_: PeopleFormState | undefined, formData: Form
   const parsed = teacherSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
   const { supabase, schoolId } = await requirePeopleContext("teachers", "manage"); const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Teacher records can only be created through the HRM hiring workflow." };
-  const payload = { first_name: parsed.data.firstName, last_name: parsed.data.lastName, gender: parsed.data.gender || null, date_of_birth: parsed.data.dateOfBirth || null, email: parsed.data.email || null, phone: parsed.data.phone || null, address: parsed.data.address || null, joining_date: parsed.data.joiningDate || null, qualification: parsed.data.qualification || null, specialization: parsed.data.specialization || null, employment_status: parsed.data.employmentStatus, is_active: parsed.data.employmentStatus === "active", deleted_at: parsed.data.employmentStatus === "terminated" ? new Date().toISOString() : null };
+  const { data: currentTeacher, error: statusError } = await supabase.from("teachers").select("employment_status,deleted_at").eq("id", id).eq("school_id", schoolId).maybeSingle();
+  if (statusError || !currentTeacher) return { error: "Teacher record could not be verified." };
+  if ((parsed.data.employmentStatus === "terminated") !== (currentTeacher.employment_status === "terminated")) {
+    return { error: "Use the HRM termination workflow to terminate or restore an employee." };
+  }
+  const payload = { first_name: parsed.data.firstName, last_name: parsed.data.lastName, gender: parsed.data.gender || null, date_of_birth: parsed.data.dateOfBirth || null, email: parsed.data.email || null, phone: parsed.data.phone || null, address: parsed.data.address || null, joining_date: parsed.data.joiningDate || null, qualification: parsed.data.qualification || null, specialization: parsed.data.specialization || null, employment_status: parsed.data.employmentStatus, is_active: parsed.data.employmentStatus === "active", deleted_at: parsed.data.employmentStatus === "terminated" ? currentTeacher.deleted_at : null };
   const { error } = await supabase.from("teachers").update(payload).eq("id", id).eq("school_id", schoolId);
   if (error) return { error: error.code === "23505" ? "Employee ID already use ho raha hai." : "Teacher save nahi ho saka." };
   revalidatePath("/teachers"); if (id) revalidatePath(`/teachers/${id}`); return { success: id ? "Teacher update ho gaya." : "Teacher add ho gaya." };
@@ -22,7 +27,12 @@ export async function saveStaff(_: PeopleFormState | undefined, formData: FormDa
   const parsed = staffSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error);
   const { supabase, schoolId } = await requirePeopleContext("staff", "manage"); const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Staff records can only be created through the HRM hiring workflow." };
-  const payload = { first_name: parsed.data.firstName, last_name: parsed.data.lastName, department: parsed.data.department || null, designation: parsed.data.designation, email: parsed.data.email || null, phone: parsed.data.phone || null, joining_date: parsed.data.joiningDate || null, employment_status: parsed.data.employmentStatus, is_active: parsed.data.employmentStatus === "active", deleted_at: parsed.data.employmentStatus === "terminated" ? new Date().toISOString() : null };
+  const { data: currentStaff, error: statusError } = await supabase.from("staff").select("employment_status,deleted_at").eq("id", id).eq("school_id", schoolId).maybeSingle();
+  if (statusError || !currentStaff) return { error: "Staff record could not be verified." };
+  if ((parsed.data.employmentStatus === "terminated") !== (currentStaff.employment_status === "terminated")) {
+    return { error: "Use the HRM termination workflow to terminate or restore an employee." };
+  }
+  const payload = { first_name: parsed.data.firstName, last_name: parsed.data.lastName, department: parsed.data.department || null, designation: parsed.data.designation, email: parsed.data.email || null, phone: parsed.data.phone || null, joining_date: parsed.data.joiningDate || null, employment_status: parsed.data.employmentStatus, is_active: parsed.data.employmentStatus === "active", deleted_at: parsed.data.employmentStatus === "terminated" ? currentStaff.deleted_at : null };
   const { error } = await supabase.from("staff").update(payload).eq("id", id).eq("school_id", schoolId);
   if (error) return { error: error.code === "23505" ? "Employee ID already use ho raha hai." : "Staff save nahi ho saka." };
   revalidatePath("/staff"); if (id) revalidatePath(`/staff/${id}`); return { success: id ? "Staff update ho gaya." : "Staff add ho gaya." };

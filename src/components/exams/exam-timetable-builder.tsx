@@ -5,7 +5,6 @@ import { useActionState, useState } from "react";
 
 import { saveExamSchedule } from "@/app/actions/exams";
 import { SubmitButton } from "@/components/auth/submit-button";
-import { getAssignedTeacherIds, type TeacherSubjectAssignment } from "@/lib/academics/teacher-assignments";
 
 type ExamOption = {
   id: string;
@@ -32,7 +31,7 @@ export function ExamTimetableBuilder({
   sections,
   subjects,
   examiners,
-  teacherAssignments,
+  lockedSections,
   initialExamId = "",
   initialClassId = "",
   initialSectionId = "",
@@ -43,7 +42,7 @@ export function ExamTimetableBuilder({
   sections: SectionOption[];
   subjects: SubjectOption[];
   examiners: ExaminerOption[];
-  teacherAssignments: TeacherSubjectAssignment[];
+  lockedSections: string[];
   initialExamId?: string;
   initialClassId?: string;
   initialSectionId?: string;
@@ -58,12 +57,8 @@ export function ExamTimetableBuilder({
   const exam = exams.find((item) => item.id === examId);
   const examTerms = terms.filter((term) => term.academic_session_id === exam?.academic_session_id);
   const classSubjects = subjects.filter((subject) => subject.exam_id === examId && subject.class_id === classId);
-  const classSections = sections.filter((section) => section.class_id === classId);
-  const selectedSubject = classSubjects.find((subject) => subject.id === examSubjectId);
-  const assignedExaminerIds = exam && selectedSubject
-    ? getAssignedTeacherIds(teacherAssignments, exam.academic_session_id, selectedSubject.subject_id, classId)
-    : new Set<string>();
-  const assignedExaminers = examiners.filter((item) => assignedExaminerIds.has(item.id));
+  const classSections = sections.filter((section) => section.class_id === classId
+    && !lockedSections.includes(`${examId}:${section.id}`));
   const term = examTerms.find((item) => item.id === termId);
   const minDate = !exam ? "" : !term || exam.starts_on > term.starts_on ? exam.starts_on : term.starts_on;
   const maxDate = !exam ? "" : !term || exam.ends_on < term.ends_on ? exam.ends_on : term.ends_on;
@@ -99,9 +94,9 @@ export function ExamTimetableBuilder({
           </select>
         </label>
         <label className="student-field">Section
-          <select name="sectionId" value={sectionId} required disabled={!classId || !classSections.length}
+          <select name="sectionId" value={classSections.some((item) => item.id === sectionId) ? sectionId : ""} required disabled={!classId || !classSections.length}
             onChange={(event) => setSectionId(event.target.value)}>
-            <option value="" disabled>{classId ? "Select section" : "Select class first"}</option>
+            <option value="" disabled>{!classId ? "Select class first" : classSections.length ? "Select section" : "All sections submitted"}</option>
             {classSections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </label>
@@ -123,10 +118,10 @@ export function ExamTimetableBuilder({
           </select>
         </label>
         <label className="student-field">Examiner
-          <select name="examinerTeacherId" value={assignedExaminers.some((item) => item.id === examinerTeacherId) ? examinerTeacherId : ""} required disabled={!assignedExaminers.length}
+          <select name="examinerTeacherId" value={examiners.some((item) => item.id === examinerTeacherId) ? examinerTeacherId : ""} required disabled={!examiners.length}
             onChange={(event) => setExaminerTeacherId(event.target.value)}>
-            <option value="" disabled>{assignedExaminers.length ? "Select assigned examiner" : "No subject teacher assigned"}</option>
-            {assignedExaminers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <option value="" disabled>{examiners.length ? "Select teacher" : "No active teachers available"}</option>
+            {examiners.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </label>
         <label className="student-field">Exam date
@@ -143,10 +138,12 @@ export function ExamTimetableBuilder({
         && <p className="exams-inline-hint">This draft has no class subjects yet. <Link href={`/exams/${examId}`}>Add exam subjects first →</Link></p>}
       {exam && !examTerms.length
         && <p className="exams-inline-hint">No academic term belongs to this exam&apos;s session. Add or activate a matching academic term in Setup.</p>}
-      {examSubjectId && !assignedExaminers.length
-        && <p className="exams-inline-hint">No active teacher is assigned to this subject for the selected class and exam session. Assign a subject teacher during hiring or in Curriculum before scheduling.</p>}
+      {exam && classId && !classSections.length
+        && <p className="exams-inline-hint">Every section in this class has already been submitted for marking.</p>}
+      {!examiners.length
+        && <p className="exams-inline-hint">No active teachers are available to act as examiners. Add or activate a teacher in HRM.</p>}
       <div className="timetable-form__actions">
-        <SubmitButton disabled={Boolean(examSubjectId && !assignedExaminers.length)}>Generate exam schedule</SubmitButton>
+        <SubmitButton disabled={!examiners.length}>Generate exam schedule</SubmitButton>
       </div>
     </form>
   );

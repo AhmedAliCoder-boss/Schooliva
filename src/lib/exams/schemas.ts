@@ -78,6 +78,7 @@ export const markRecordSchema = z.object({
 
 export const marksSubmissionSchema = z.object({
   examSubjectId: postgresUuid,
+  sectionId: postgresUuid,
   records: z.array(markRecordSchema).min(1, "Kam se kam ek student required hai."),
 }).refine((values) => new Set(values.records.map((record) => record.studentId)).size === values.records.length, {
   message: "Student marks must not contain duplicate entries.",

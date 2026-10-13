@@ -27,6 +27,7 @@ export const navGroups = [
       { label: "Timetable", href: "/timetable", icon: "timetable" },
       { label: "Exams", href: "/exams", icon: "exams" },
       { label: "Results", href: "/results", icon: "results" },
+      { label: "SLC / TC", href: "/slc-tc", icon: "documents" },
     ],
   },
   {
@@ -47,6 +48,7 @@ export const navGroups = [
       { label: "Candidates", href: "/hrm/candidates", icon: "candidates" },
       { label: "Interviews", href: "/hrm/interviews", icon: "interviews" },
       { label: "Employees", href: "/hrm/employees", icon: "teachers" },
+      { label: "Employee exits", href: "/hrm/exits", icon: "users" },
       { label: "People attendance", href: "/people-attendance", icon: "attendance" },
       { label: "Leave", href: "/leave", icon: "leave" },
       { label: "Salary & payroll", href: "/payroll", icon: "payroll" },

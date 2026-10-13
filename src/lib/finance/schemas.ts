@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+const postgresUuid = z.string().regex(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+
 export const feeStructureSchema = z.object({
-  academicSessionId: z.string().uuid("Academic session required hai."),
-  classId: z.string().uuid("Class required hai."),
+  academicSessionId: postgresUuid,
+  classId: postgresUuid,
   feeType: z.enum(["admission", "tuition", "examination", "transport", "library", "laboratory", "activity", "other"]),
   amount: z.coerce.number().min(0),
   frequency: z.enum(["one_time", "monthly", "term", "quarterly", "yearly"]),
@@ -12,15 +14,24 @@ export const feeStructureSchema = z.object({
 });
 
 export const invoiceSchema = z.object({
-  studentId: z.string().uuid("Student required hai."),
-  academicSessionId: z.string().uuid("Academic session required hai."),
+  studentId: postgresUuid,
+  academicSessionId: z.string().trim().max(100),
   dueDate: z.string().trim().min(1, "Due date required hai."),
-  feeStructureIds: z.array(z.string().uuid()).min(1, "At least one fee item is required."),
+  feeStructureIds: z.array(postgresUuid).min(1, "At least one fee item is required."),
   notes: z.string().trim().optional(),
 });
 
+export const feeStructureStatusSchema = z.object({
+  feeStructureId: postgresUuid,
+  isActive: z.enum(["true", "false"]).transform((value) => value === "true"),
+});
+
+export const feeStructureDeleteSchema = z.object({
+  feeStructureId: postgresUuid,
+});
+
 export const paymentSchema = z.object({
-  invoiceId: z.string().uuid("Invoice required hai."),
+  invoiceId: postgresUuid,
   amount: z.coerce.number().positive("Payment amount positive hona chahiye."),
   paymentMethod: z.enum(["cash", "bank_transfer", "card", "upi", "cheque", "other"]),
   paymentDate: z.string().trim().min(1, "Payment date required hai."),

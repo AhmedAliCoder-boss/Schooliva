@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { expenseSchema, feeStructureSchema, invoiceSchema, paymentSchema } from "../../src/lib/finance/schemas";
+import { expenseSchema, feeStructureDeleteSchema, feeStructureSchema, feeStructureStatusSchema, invoiceSchema, paymentSchema } from "../../src/lib/finance/schemas";
 
 describe("finance validation", () => {
   const sessionId = "00000000-0000-4000-8000-000000000001";
   const classId = "00000000-0000-4000-8000-000000000002";
   const invoiceId = "00000000-0000-4000-8000-000000000004";
+  const postgresCompatibleSessionId = "30000000-0000-0000-0000-000000000001";
 
   it("coerces valid fee amounts and due days", () => {
     const result = feeStructureSchema.parse({
@@ -32,6 +33,7 @@ describe("finance validation", () => {
   it("rejects invalid identifiers and negative amounts", () => {
     expect(feeStructureSchema.safeParse({ academicSessionId: "bad", classId, feeType: "tuition", amount: -1, frequency: "term", dueDay: 15 }).success).toBe(false);
     expect(invoiceSchema.safeParse({ studentId: "bad", academicSessionId: sessionId, dueDate: "2026-09-16" }).success).toBe(false);
+    expect(feeStructureSchema.safeParse({ academicSessionId: postgresCompatibleSessionId, classId: postgresCompatibleSessionId, feeType: "tuition", amount: 100, frequency: "monthly", dueDay: 1 }).success).toBe(true);
   });
 
   it("requires a positive payment and supported payment method", () => {
@@ -40,8 +42,32 @@ describe("finance validation", () => {
     expect(paymentSchema.safeParse({ invoiceId, amount: "100.00", paymentMethod: "cash", paymentDate: "2026-09-16" }).success).toBe(true);
   });
 
+  it("validates fee structure status and removal requests", () => {
+    expect(feeStructureStatusSchema.parse({ feeStructureId: classId, isActive: "false" })).toEqual({
+      feeStructureId: classId,
+      isActive: false,
+    });
+    expect(feeStructureStatusSchema.parse({ feeStructureId: classId, isActive: "true" }).isActive).toBe(true);
+    expect(feeStructureStatusSchema.safeParse({ feeStructureId: "bad", isActive: "true" }).success).toBe(false);
+    expect(feeStructureStatusSchema.safeParse({ feeStructureId: classId, isActive: "yes" }).success).toBe(false);
+    expect(feeStructureDeleteSchema.safeParse({ feeStructureId: classId }).success).toBe(true);
+    expect(feeStructureDeleteSchema.safeParse({ feeStructureId: "bad" }).success).toBe(false);
+  });
+
   it("requires invoice fee items and validates expense entries", () => {
-    expect(invoiceSchema.safeParse({ studentId: invoiceId, academicSessionId: sessionId, dueDate: "2026-09-16" }).success).toBe(false);
+    expect(invoiceSchema.safeParse({
+      studentId: "70000000-0000-0000-0000-000000000001",
+      academicSessionId: "",
+      dueDate: "2026-09-16",
+      feeStructureIds: ["50000000-0000-0000-0000-000000000001"],
+    }).success).toBe(true);
+    expect(invoiceSchema.safeParse({
+      studentId: "70000000-0000-0000-0000-000000000001",
+      academicSessionId: sessionId,
+      dueDate: "2026-09-16",
+      feeStructureIds: ["50000000-0000-0000-0000-000000000001"],
+    }).success).toBe(true);
+    expect(invoiceSchema.safeParse({ studentId: invoiceId, academicSessionId: sessionId, dueDate: "2026-09-16", feeStructureIds: ["bad"] }).success).toBe(false);
     expect(expenseSchema.safeParse({
       category: "utilities",
       description: "Electricity bill",

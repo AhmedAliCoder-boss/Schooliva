@@ -60,6 +60,7 @@ export default async function StaffProfilePage({ params }: { params: Promise<{ i
         <StaffForm staff={data as Record<string, string | null>} />
       </section>
       <aside className="student-profile-aside">
+        {canManage && <Link className="text-action" href="/hrm/exits">Manage employee exits →</Link>}
         <EmployeeVerificationPanel supabase={supabase} schoolId={schoolId} employeeType="staff" employeeId={id} canManage={canManage === true} />
         {!data.profile_id && canRequestAccount && <EmployeeAccountRequestForm
           employeeId={id}

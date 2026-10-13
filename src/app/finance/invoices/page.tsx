@@ -1,28 +1,78 @@
 import { InvoiceForm } from "@/components/finance/finance-forms";
 import { FinanceFormDisclosure } from "@/components/finance/finance-form-disclosure";
-import Link from "next/link";
+import { InvoiceRegister, type InvoiceRegisterRow, type InvoiceRegisterSession } from "@/components/finance/invoice-register";
 import { canManageFinance, requireFinanceContext } from "@/lib/finance/context";
 import { formatCurrency } from "@/lib/format/currency";
 
-type StudentRelation = { first_name: string | null; last_name: string | null } | Array<{ first_name: string | null; last_name: string | null }> | null;
-function studentName(value: StudentRelation) {
-  const student = Array.isArray(value) ? value[0] : value;
-  return [student?.first_name, student?.last_name].filter(Boolean).join(" ") || "Student";
+type Relation<T> = T | T[] | null;
+type InvoiceStudent = { first_name: string | null; last_name: string | null; admission_number: string | null; student_identifier: string | null };
+type InvoiceSession = { name: string | null };
+
+function relation<T>(value: Relation<T>): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function todayInSchoolTimeZone() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 export default async function FinanceInvoicesPage() {
   const { supabase, schoolId } = await requireFinanceContext("view");
-  const [{ data: invoices, error: invoicesError }, { data: sessions, error: sessionsError }, { data: students, error: studentsError }, { data: structures, error: structuresError }, canManage] = await Promise.all([
-    supabase.from("fee_invoices").select("id,invoice_number,student_id,status,total,paid_amount,remaining_amount,due_date,students(first_name,last_name)").eq("school_id", schoolId).order("created_at", { ascending: false }),
+  const [{ data: sessions, error: sessionsError }, { data: students, error: studentsError }, { data: structures, error: structuresError }, canManage] = await Promise.all([
     supabase.from("academic_sessions").select("id,name").eq("school_id", schoolId).order("starts_on", { ascending: false }),
-    supabase.from("students").select("id,first_name,last_name,admission_number").eq("school_id", schoolId).eq("status", "active").order("last_name"),
+    supabase.from("students").select("id,first_name,last_name,student_identifier").eq("school_id", schoolId).eq("status", "active").order("last_name"),
     supabase.from("fee_structures").select("id,fee_type,amount").eq("school_id", schoolId).eq("is_active", true).order("fee_type"),
     canManageFinance(supabase, schoolId),
   ]);
-  if (invoicesError || sessionsError || studentsError || structuresError) throw new Error("Invoice workspace data could not be loaded.");
-  const studentOptions = (students ?? []).map((student) => ({ id: String(student.id), name: `${student.first_name ?? ""} ${student.last_name ?? ""} (${student.admission_number ?? "-"})`.trim() }));
+  if (sessionsError || studentsError || structuresError) throw new Error("Invoice workspace data could not be loaded.");
+  const studentOptions = (students ?? []).map((student) => ({
+    id: String(student.id),
+    name: `${[student.first_name, student.last_name].filter(Boolean).join(" ")} (${student.student_identifier ?? "Student ID unavailable"})`,
+  }));
   const feeOptions = (structures ?? []).map((row) => ({ id: String(row.id), name: `${row.fee_type} - ${formatCurrency(row.amount)}` }));
-  const invoiceRows = invoices ?? [];
+  const invoiceRows: InvoiceRegisterRow[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("fee_invoices")
+      .select("id,invoice_number,student_id,academic_session_id,status,total,paid_amount,remaining_amount,due_date,created_at,students(first_name,last_name,admission_number,student_identifier),academic_sessions(name)")
+      .eq("school_id", schoolId)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error("Invoice register could not be loaded.", error);
+      throw new Error("Invoice register could not be loaded.");
+    }
+    invoiceRows.push(...(data ?? []).map((invoice) => {
+      const student = relation(invoice.students as Relation<InvoiceStudent>);
+      const session = relation(invoice.academic_sessions as Relation<InvoiceSession>);
+      return {
+        id: String(invoice.id),
+        invoiceNumber: String(invoice.invoice_number),
+        studentName: [student?.first_name, student?.last_name].filter(Boolean).join(" ") || "Student",
+        admissionNumber: student?.admission_number ?? "",
+        studentIdentifier: student?.student_identifier ?? "",
+        sessionId: String(invoice.academic_session_id),
+        sessionName: session?.name ?? "",
+        dueDate: String(invoice.due_date),
+        total: Number(invoice.total ?? 0),
+        paidAmount: Number(invoice.paid_amount ?? 0),
+        remainingAmount: Number(invoice.remaining_amount ?? 0),
+        status: String(invoice.status),
+        createdAt: String(invoice.created_at),
+      };
+    }));
+    if ((data?.length ?? 0) < pageSize) break;
+  }
+  const sessionOptions: InvoiceRegisterSession[] = (sessions ?? []).map((session) => ({
+    id: String(session.id),
+    name: String(session.name),
+  }));
+  const defaultSessionId = sessionOptions[0]?.id ?? "";
 
   return <main className="students-shell finance-shell">
     <section className="module-page-header"><div className="module-page-header__row"><div>
@@ -31,12 +81,9 @@ export default async function FinanceInvoicesPage() {
     </div></div></section>
     <section className="finance-work-grid">
       {canManage && <FinanceFormDisclosure label="Billing" title="Create invoice" description="Choose a student, academic session, and fee items.">
-        <InvoiceForm sessions={(sessions ?? []).map((row) => ({ id: String(row.id), name: String(row.name) }))} students={studentOptions} feeStructures={feeOptions} />
+        <InvoiceForm sessions={sessionOptions} students={studentOptions} feeStructures={feeOptions} defaultSessionId={defaultSessionId} />
       </FinanceFormDisclosure>}
-      <section className="finance-work-card finance-work-card--records" aria-labelledby="invoice-list-title">
-        <header className="finance-work-card__heading"><div><span className="dashboard-panel-kicker">Invoice register</span><h2 id="invoice-list-title">Student invoices</h2><p>{invoiceRows.length} invoices</p></div></header>
-        <div className="student-table-wrap"><table className="student-table"><thead><tr><th>Invoice</th><th>Student</th><th>Due date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th className="no-print">Document</th></tr></thead><tbody>{invoiceRows.length ? invoiceRows.map((invoice) => <tr key={String(invoice.id)}><td>{String(invoice.invoice_number)}</td><td>{studentName(invoice.students as StudentRelation)}</td><td>{String(invoice.due_date)}</td><td>{formatCurrency(invoice.total)}</td><td>{formatCurrency(invoice.paid_amount)}</td><td>{formatCurrency(invoice.remaining_amount)}</td><td><span className={`status-pill ${String(invoice.status)}`}>{String(invoice.status).replaceAll("_", " ")}</span></td><td className="no-print"><Link className="school-document-link" href={`/finance/print/invoice/${invoice.id}`}>Print / PDF</Link></td></tr>) : <tr><td colSpan={8}><div className="student-empty"><h3>No invoices yet</h3><p>Create an invoice to start tracking student balances.</p></div></td></tr>}</tbody></table></div>
-      </section>
+      <InvoiceRegister invoices={invoiceRows} sessions={sessionOptions} today={todayInSchoolTimeZone()} />
     </section>
   </main>;
 }

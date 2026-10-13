@@ -19,12 +19,11 @@ export default async function ExamTimetablePage({ searchParams }: { searchParams
     { data: sections, error: sectionsError },
     { data: subjects, error: subjectsError },
     { data: examiners, error: examinersError },
-    { data: teacherAssignments, error: teacherAssignmentsError },
     { data: schedules, error: schedulesError },
     { data: canManage, error: permissionError },
   ] = await Promise.all([
     supabase.from("exams").select("id,name,academic_session_id,starts_on,ends_on,status,academic_sessions(name)")
-      .eq("school_id", schoolId).eq("status", "draft").order("starts_on", { ascending: false }),
+      .eq("school_id", schoolId).order("starts_on", { ascending: false }),
     supabase.from("academic_terms").select("id,name,academic_session_id,starts_on,ends_on")
       .eq("school_id", schoolId).order("starts_on"),
     supabase.from("classes").select("id,name").eq("school_id", schoolId).eq("status", "active").order("name"),
@@ -33,20 +32,28 @@ export default async function ExamTimetablePage({ searchParams }: { searchParams
       .eq("school_id", schoolId).order("created_at"),
     supabase.from("teachers").select("id,first_name,last_name").eq("school_id", schoolId)
       .eq("employment_status", "active").eq("is_active", true).is("deleted_at", null).order("last_name"),
-    supabase.from("teacher_assignments").select("teacher_id,academic_session_id,subject_id,class_id")
-      .eq("school_id", schoolId).eq("assignment_type", "subject"),
     supabase.from("exam_schedules")
       .select("id,exam_subject_id,section_id,academic_term_id,examiner_teacher_id,scheduled_on,starts_at,ends_at,room,sections(name),academic_terms(name),teachers(first_name,last_name),exam_subjects(exam_id,class_id,subjects(name),classes(name),exams(name))")
       .eq("school_id", schoolId).order("scheduled_on", { ascending: true }).order("starts_at", { ascending: true }).limit(300),
     supabase.rpc("has_permission", { target_school_id: schoolId, target_resource: "exams", target_action: "manage" }),
   ]);
-  const dataError = examsError ?? termsError ?? classesError ?? sectionsError ?? subjectsError ?? examinersError ?? teacherAssignmentsError ?? schedulesError ?? permissionError;
+  const dataError = examsError ?? termsError ?? classesError ?? sectionsError ?? subjectsError ?? examinersError ?? schedulesError ?? permissionError;
   if (dataError) {
     console.error("Exam timetable page data could not be loaded.", dataError);
     return <main className="timetable-shell"><p className="auth-error">Exam timetable could not be loaded. Refresh and try again.</p></main>;
   }
 
-  const examRows = exams ?? [];
+  const examRows = (exams ?? []).filter((exam) => exam.status === "draft");
+  const draftExamIds = examRows.map((exam) => exam.id);
+  const { data: sectionWorkflows, error: workflowsError } = draftExamIds.length
+    ? await supabase.from("exam_section_workflows").select("exam_id,section_id,status")
+      .eq("school_id", schoolId).in("exam_id", draftExamIds)
+    : { data: [], error: null };
+  if (workflowsError) {
+    console.error("Exam section progress could not be loaded for the timetable builder.", workflowsError);
+    return <main className="timetable-shell"><p className="auth-error">Exam section progress could not be loaded. Refresh and try again.</p></main>;
+  }
+  const lockedSections = (sectionWorkflows ?? []).map((workflow) => `${workflow.exam_id}:${workflow.section_id}`);
   const termRows = terms ?? [];
   const classRows = classes ?? [];
   const sectionRows = sections ?? [];
@@ -67,7 +74,6 @@ export default async function ExamTimetablePage({ searchParams }: { searchParams
     id: item.id,
     name: `${item.first_name} ${item.last_name}`.trim(),
   }));
-  const teacherAssignmentRows = teacherAssignments ?? [];
   const examNames = new Map(examRows.map((exam) => [exam.id, exam.name]));
   const classNames = new Map(classRows.map((item) => [item.id, item.name]));
   const initialExamId = examRows.some((exam) => exam.id === params.examId) ? params.examId : "";
@@ -110,7 +116,7 @@ export default async function ExamTimetablePage({ searchParams }: { searchParams
                 sections={sectionRows}
                 subjects={subjectRows}
                 examiners={examinerRows}
-                teacherAssignments={teacherAssignmentRows}
+                lockedSections={lockedSections}
                 initialExamId={initialExamId}
                 initialClassId={initialClassId}
                 initialSectionId={initialSectionId}

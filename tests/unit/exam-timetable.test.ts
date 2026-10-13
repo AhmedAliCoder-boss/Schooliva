@@ -36,6 +36,7 @@ describe("examScheduleSchema", () => {
     it("requires unique student records", () => {
       expect(marksSubmissionSchema.safeParse({
         examSubjectId: "40000000-0000-0000-0000-000000000001",
+        sectionId: "50000000-0000-0000-0000-000000000001",
         records: [record, { ...record }],
       }).success).toBe(false);
     });

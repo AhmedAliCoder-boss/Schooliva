@@ -9,7 +9,10 @@ import type { PeopleFormState } from "@/lib/people/schemas";
 type RecordValue = Record<string, string | null | undefined>;
 function Feedback({ state }: { state: PeopleFormState | undefined }) { return <>{state?.error && <p className="student-error">{state.error}</p>}{state?.success && <p className="student-success">{state.success}</p>}</>; }
 function Field({ label, name, type = "text", value, required = false, readOnly = false }: { label: string; name: string; type?: string; value?: string | null; required?: boolean; readOnly?: boolean }) { return <label className="student-field">{label}<input name={name} type={type} defaultValue={value ?? ""} required={required} readOnly={readOnly} /></label>; }
-function Status({ value = "active" }: { value?: string | null }) { return <label className="student-field">Employment status<select name="employmentStatus" defaultValue={value ?? "active"}><option value="active">Active</option><option value="inactive">Inactive</option><option value="on_leave">On leave</option><option value="terminated">Terminated</option></select></label>; }
+function Status({ value = "active" }: { value?: string | null }) {
+  if (value === "terminated") return <label className="student-field">Employment status<input value="Terminated" readOnly /><input type="hidden" name="employmentStatus" value="terminated" /></label>;
+  return <label className="student-field">Employment status<select name="employmentStatus" defaultValue={value ?? "active"}><option value="active">Active</option><option value="inactive">Inactive</option><option value="on_leave">On leave</option></select></label>;
+}
 
 export function TeacherForm({ teacher }: { teacher?: RecordValue }) {
   const [state, action] = useActionState(saveTeacher, undefined);

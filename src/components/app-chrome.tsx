@@ -149,7 +149,7 @@ export function AppChrome({
           <Link href="/payroll/settings" aria-current={pathname.startsWith("/payroll/settings") ? "page" : undefined} className={pathname.startsWith("/payroll/settings") ? "is-active" : undefined}>Policy &amp; salaries</Link>
         </nav>}
         {pathname.startsWith("/hrm") && <nav className="workspace-subnav finance-subnav" aria-label="HRM recruitment navigation">
-          {[{ label: "Overview", href: "/hrm" }, { label: "Vacancies", href: "/hrm/jobs" }, { label: "Candidates", href: "/hrm/candidates" }, { label: "Interviews", href: "/hrm/interviews" }, { label: "Employees", href: "/hrm/employees" }].map((item) => (
+          {[{ label: "Overview", href: "/hrm" }, { label: "Vacancies", href: "/hrm/jobs" }, { label: "Candidates", href: "/hrm/candidates" }, { label: "Interviews", href: "/hrm/interviews" }, { label: "Employees", href: "/hrm/employees" }, { label: "Employee exits", href: "/hrm/exits" }].map((item) => (
             <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={pathname === item.href ? "is-active" : undefined}>{item.label}</Link>
           ))}
         </nav>}
