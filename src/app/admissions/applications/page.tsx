@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAdmissionContext } from "@/lib/admissions/context";
 
 const statuses = ["draft", "submitted", "under_review", "documents_pending", "test_pending", "interview_pending", "approved", "rejected", "waitlisted", "admitted", "converted_to_student"] as const;
+const groupedStatuses = ["review"] as const;
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -22,7 +23,7 @@ export default async function ApplicationsPage({
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const pageSize = 12;
 
-  if (status !== "all" && !statuses.includes(status as typeof statuses[number])) redirect("/admissions/applications");
+  if (status !== "all" && !statuses.includes(status as typeof statuses[number]) && !groupedStatuses.includes(status as typeof groupedStatuses[number])) redirect("/admissions/applications");
 
   let query = supabase
     .from("admissions")
@@ -30,7 +31,9 @@ export default async function ApplicationsPage({
     .eq("school_id", schoolId)
     .order("created_at", { ascending: false });
   if (pattern) query = query.ilike("applicant_name", `%${pattern}%`);
-  if (status !== "all") query = query.eq("status", status);
+  if (status === "review") query = query.in("status", ["under_review", "documents_pending", "test_pending", "interview_pending"]);
+  else if (status === "admitted") query = query.in("status", ["admitted", "converted_to_student"]);
+  else if (status !== "all") query = query.eq("status", status);
 
   const start = (page - 1) * pageSize;
   const { data: applications, count, error } = await query.range(start, start + pageSize - 1);
@@ -49,7 +52,7 @@ export default async function ApplicationsPage({
 
       <form method="get" className="admissions-filters">
         <label>Search applicant<input name="search" defaultValue={pattern} placeholder="Enter applicant name" /></label>
-        <label>Application status<select name="status" defaultValue={status}><option value="all">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</select></label>
+        <label>Application status<select name="status" defaultValue={status}><option value="all">All statuses</option><option value="review">In review</option>{statuses.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</select></label>
         <button type="submit">Apply filters</button>
       </form>
 

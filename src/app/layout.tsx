@@ -52,10 +52,18 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const activeSchoolContext = user ? await getActiveSchoolContext(supabase, user.id) : null;
-  const brandingProfile = activeSchoolContext?.schoolId
-    ? await getSchoolBrandingForSchool(supabase, activeSchoolContext.schoolId)
-    : null;
+  const [brandingProfile, { data: headerProfile }] = await Promise.all([
+    activeSchoolContext?.schoolId
+      ? getSchoolBrandingForSchool(supabase, activeSchoolContext.schoolId)
+      : Promise.resolve(null),
+    user
+      ? supabase.from("profiles").select("full_name,avatar_path").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
   const brandingStyle = brandingProfile?.theme ? buildBrandingCssVars(brandingProfile.theme) : undefined;
+  const { data: userAvatar } = user && headerProfile?.avatar_path
+    ? await supabase.storage.from("profile-avatars").createSignedUrl(headerProfile.avatar_path, 60 * 60)
+    : { data: null };
 
   return (
     <html
@@ -65,7 +73,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     >
       <body className="min-h-full flex flex-col" style={brandingStyle}>
         <RegisterPwa />
-        <AppChrome schoolLogoUrl={brandingProfile?.logoUrl ?? null}>{children}</AppChrome>
+        <AppChrome
+          schoolLogoUrl={brandingProfile?.logoUrl ?? null}
+          userName={headerProfile?.full_name ?? user?.email ?? "Schooliva user"}
+          userAvatarUrl={userAvatar?.signedUrl ?? null}
+          schoolName={activeSchoolContext?.schoolName ?? null}
+        >
+          {children}
+        </AppChrome>
       </body>
     </html>
   );

@@ -25,25 +25,6 @@ const schoolSchema = z.object({
   status: z.enum(["active", "inactive", "suspended"]).default("active"),
 });
 
-const schoolUserSchema = z.object({
-  schoolId: z.string().uuid(),
-  fullName: z.string().trim().min(2),
-  username: z.string().trim().min(3),
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-  roleSlug: z.string().trim().min(2),
-});
-
-const resetPasswordSchema = z.object({
-  email: z.string().trim().email(),
-});
-
-const toggleAccountSchema = z.object({
-  userId: z.string().uuid(),
-  schoolId: z.string().uuid().optional(),
-  enabled: z.enum(["true", "false"]),
-});
-
 const schoolBrandingSchema = z.object({
   schoolId: z.string().uuid(),
   primaryColor: z.string().trim().default("#2563eb"),
@@ -119,10 +100,6 @@ const lifecycleActivationSchema = z.object({
   contractNumber: z.string().trim().min(2).default("CT-LIVE"),
   trialId: z.string().uuid().optional(),
 });
-
-function getAppOrigin() {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-}
 
 export async function enterSchoolWorkspace(formData: FormData) {
   const supabase = await createClient();
@@ -317,135 +294,6 @@ export async function createSchool(formData: FormData) {
   });
 
   redirect("/admin/schools");
-}
-
-export async function createSchoolUser(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
-    redirect("/dashboard?error=not-authorized");
-  }
-
-  const parsed = schoolUserSchema.safeParse({
-    schoolId: formData.get("schoolId"),
-    fullName: formData.get("fullName"),
-    username: formData.get("username"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    roleSlug: formData.get("roleSlug"),
-  });
-
-  if (!parsed.success) {
-    redirect("/admin/schools/" + (String(formData.get("schoolId") ?? "") || "") + "?error=invalid-user");
-  }
-
-  const isMaster = await isMasterAdminUser(supabase, user.id);
-  const { data: allSchools } = await supabase.from("schools").select("id");
-  const { data: memberships } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id);
-  const authorizedSchoolId = resolveAuthorizedSchoolId({
-    candidateSchoolId: parsed.data.schoolId,
-    availableSchoolIds: isMaster ? (allSchools ?? []).map((school) => school.id) : (memberships ?? []).map((membership) => membership.school_id),
-    isMasterAdmin: isMaster,
-  });
-
-  if (!authorizedSchoolId) {
-    redirect("/dashboard?error=not-authorized");
-  }
-
-  const { data: school } = await supabase.from("schools").select("id").eq("id", authorizedSchoolId).maybeSingle();
-  if (!school) {
-    redirect("/admin/schools?error=school-not-found");
-  }
-
-  const { data: role } = await supabase.from("roles").select("id").eq("slug", parsed.data.roleSlug).maybeSingle();
-  if (!role) {
-    redirect("/admin/schools/" + parsed.data.schoolId + "?error=role-not-found");
-  }
-
-  const { data: authUser, error: authError } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: {
-      data: {
-        full_name: parsed.data.fullName,
-        username: parsed.data.username,
-      },
-      emailRedirectTo: getAppOrigin() + "/sign-in",
-    },
-  });
-
-  if (authError || !authUser.user) {
-    redirect("/admin/schools/" + parsed.data.schoolId + "?error=user-create-failed");
-  }
-
-  const { error: membershipError } = await supabase.from("user_roles").insert({
-    user_id: authUser.user.id,
-    school_id: authorizedSchoolId,
-    role_id: role.id,
-  });
-
-  if (membershipError) {
-    redirect("/admin/schools/" + parsed.data.schoolId + "?error=membership-create-failed");
-  }
-
-  await recordAuditEvent(supabase, {
-    schoolId: authorizedSchoolId,
-    action: "create",
-    entityType: "user_roles",
-    entityId: role.id,
-    metadata: { created_user_id: authUser.user.id, role_slug: parsed.data.roleSlug, source: "school_admin" },
-    actorId: user.id,
-  });
-
-  redirect("/admin/schools/" + authorizedSchoolId + "?success=user-created");
-}
-
-export async function resetSchoolUserPassword(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
-    redirect("/dashboard?error=not-authorized");
-  }
-
-  const parsed = resetPasswordSchema.safeParse({ email: formData.get("email") });
-  if (!parsed.success) {
-    redirect("/admin/schools?error=invalid-email");
-  }
-
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: getAppOrigin() + "/reset-password",
-  });
-
-  if (error) {
-    redirect("/admin/schools?error=password-reset-failed");
-  }
-
-  redirect("/admin/schools?success=password-reset-sent");
-}
-
-export async function toggleSchoolUserStatus(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
-    redirect("/dashboard?error=not-authorized");
-  }
-
-  const parsed = toggleAccountSchema.safeParse({
-    userId: formData.get("userId"),
-    schoolId: formData.get("schoolId"),
-    enabled: formData.get("enabled"),
-  });
-
-  if (!parsed.success) {
-    redirect("/admin/schools?error=invalid-status");
-  }
-
-  const { error } = await supabase.from("profiles").update({ is_active: parsed.data.enabled === "true" }).eq("id", parsed.data.userId);
-  if (error) {
-    redirect("/admin/schools?error=status-update-failed");
-  }
-
-  redirect(parsed.data.schoolId ? "/admin/schools/" + parsed.data.schoolId : "/admin/schools");
 }
 
 export async function saveSchoolBranding(formData: FormData) {

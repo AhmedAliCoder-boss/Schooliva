@@ -9,6 +9,7 @@ import { signOut } from "@/app/actions/auth";
 import { GlobalSearchBar } from "@/components/search/global-search";
 import { LiveClock } from "@/components/dashboard/live-clock";
 import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
+import { getActiveHref } from "@/lib/navigation/active-path";
 
 export const navGroups = [
   {
@@ -22,9 +23,7 @@ export const navGroups = [
     items: [
       { label: "Admissions", href: "/admissions", icon: "admissions" },
       { label: "Students", href: "/students", icon: "students" },
-      { label: "Teachers", href: "/teachers", icon: "teachers" },
       { label: "Attendance", href: "/attendance", icon: "attendance" },
-      { label: "People attendance", href: "/people-attendance", icon: "attendance" },
       { label: "Timetable", href: "/timetable", icon: "timetable" },
       { label: "Exams", href: "/exams", icon: "exams" },
       { label: "Results", href: "/results", icon: "results" },
@@ -33,9 +32,26 @@ export const navGroups = [
   {
     title: "Finance",
     items: [
-      { label: "Fees", href: "/finance", icon: "finance" },
-      { label: "Payments", href: "/finance", icon: "payments" },
-      { label: "Expenses", href: "/finance", icon: "expenses" },
+      { label: "Overview", href: "/finance", icon: "finance" },
+      { label: "Fee structures", href: "/finance/fees", icon: "fees" },
+      { label: "Invoices", href: "/finance/invoices", icon: "documents" },
+      { label: "Payments", href: "/finance/payments", icon: "payments" },
+      { label: "Expenses", href: "/finance/expenses", icon: "expenses" },
+    ],
+  },
+  {
+    title: "HRM",
+    items: [
+      { label: "Recruitment", href: "/hrm", icon: "recruitment" },
+      { label: "Vacancies", href: "/hrm/jobs", icon: "jobs" },
+      { label: "Candidates", href: "/hrm/candidates", icon: "candidates" },
+      { label: "Interviews", href: "/hrm/interviews", icon: "interviews" },
+      { label: "Employees", href: "/hrm/employees", icon: "teachers" },
+      { label: "People attendance", href: "/people-attendance", icon: "attendance" },
+      { label: "Leave", href: "/leave", icon: "leave" },
+      { label: "Salary & payroll", href: "/payroll", icon: "payroll" },
+      { label: "Users & Roles", href: "/staff", icon: "users" },
+      { label: "User accounts", href: "/users", icon: "users" },
     ],
   },
   {
@@ -44,7 +60,6 @@ export const navGroups = [
       { label: "Library", href: "/library", icon: "library" },
       { label: "Transport", href: "/transport", icon: "transport" },
       { label: "Inventory", href: "/inventory", icon: "inventory" },
-      { label: "Leave", href: "/leave", icon: "leave" },
     ],
   },
   {
@@ -59,8 +74,6 @@ export const navGroups = [
     items: [
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Settings", href: "/setup", icon: "settings" },
-      { label: "Users & Roles", href: "/staff", icon: "users" },
-      { label: "User accounts", href: "/users", icon: "users" },
       { label: "Audit Logs", href: "/audit", icon: "audit" },
     ],
   },
@@ -92,10 +105,22 @@ export function NavIcon({ name }: { name: string }) {
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M6 18.5V6.8A1.8 1.8 0 0 1 7.8 5h8.4A1.8 1.8 0 0 1 18 6.8v11.7M8 9h8M8 13h8M8 17h6" /></svg>;
     case "finance":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 3 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3" /></svg>;
+    case "fees":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M5 5h14v14H5zM8 9h8M8 12h8M8 15h5" /></svg>;
     case "payments":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5zm3.5-2.5v14m9-10h-7m7 5h-7" /></svg>;
     case "expenses":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M5 18.5V7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v11M7 9h10M7 13h7" /></svg>;
+    case "payroll":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><rect {...common} x="4" y="5" width="16" height="14" rx="2" /><path {...common} d="M8 9h8M8 12h5M8 16h8M17 12h.01" /></svg>;
+    case "recruitment":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM5 20c.7-2.7 3.2-4.2 7-4.2s6.3 1.5 7 4.2M18 5h3m-1.5-1.5v3" /></svg>;
+    case "jobs":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><rect {...common} x="4" y="7" width="16" height="13" rx="2" /><path {...common} d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 12h16m-10 0v2h4v-2" /></svg>;
+    case "candidates":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="9" cy="8" r="3" /><path {...common} d="M3.5 19c.5-2.6 2.3-4 5.5-4 2 0 3.5.5 4.5 1.7M16 9l2 2 3.5-4" /></svg>;
+    case "interviews":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><rect {...common} x="3.5" y="5" width="17" height="15" rx="2" /><path {...common} d="M8 3v4m8-4v4M4 9h16m-11 4h2m3 0h2m-7 3h2" /></svg>;
     case "library":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M5 19V5.5A2.5 2.5 0 0 1 7.5 3H18v15.5H7.5A2.5 2.5 0 0 0 5 19Zm0 0h13M8 8h7M8 12h7" /></svg>;
     case "transport":
@@ -123,11 +148,6 @@ export function NavIcon({ name }: { name: string }) {
   }
 }
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === href || pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
 export function SchoolivaShell({
   title,
   description,
@@ -140,6 +160,7 @@ export function SchoolivaShell({
   userAvatarUrl,
   unreadNotifications = 0,
   showMasterAdminNav = false,
+  showUserAccounts = false,
   schoolContext,
   schoolContextAction,
   brandingTheme,
@@ -157,6 +178,7 @@ export function SchoolivaShell({
   userAvatarUrl?: string | null;
   unreadNotifications?: number;
   showMasterAdminNav?: boolean;
+  showUserAccounts?: boolean;
   schoolContext?: string;
   schoolContextAction?: React.ReactNode;
   brandingTheme?: BrandingTheme;
@@ -176,7 +198,9 @@ export function SchoolivaShell({
     };
   }, []);
 
-  const navGroupsWithAdmin = [...navGroups] as Array<{ title: string; items: Array<{ label: string; href: string; icon: string }> }>;
+  const navGroupsWithAdmin = navGroups.map((group) => group.title === "HRM"
+    ? { ...group, items: group.items.filter((item) => item.href !== "/users" || showUserAccounts) }
+    : group) as Array<{ title: string; items: Array<{ label: string; href: string; icon: string }> }>;
   if (showMasterAdminNav) {
     navGroupsWithAdmin.push({
       title: "MASTER ADMIN",
@@ -186,6 +210,7 @@ export function SchoolivaShell({
       ],
     } as const);
   }
+  const activeHref = getActiveHref(pathname, navGroupsWithAdmin.flatMap((group) => group.items));
 
   const shellStyle = brandingTheme ? buildBrandingCssVars(brandingTheme) : undefined;
 
@@ -195,7 +220,7 @@ export function SchoolivaShell({
         <div className="schooliva-sidebar__top">
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
             {schoolLogoUrl
-              ? <img src={schoolLogoUrl} alt={schoolContext ?? "School logo"} className="schooliva-brand__logo" />
+                ? <Image src={schoolLogoUrl} alt={schoolContext ?? "School logo"} width={170} height={36} unoptimized className="schooliva-brand__logo" />
               : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority />}
           </Link>
           <button
@@ -215,9 +240,9 @@ export function SchoolivaShell({
             <div key={group.title} className="schooliva-nav__group">
               <p className="schooliva-nav__label">{group.title}</p>
               {group.items.map((item) => {
-                const active = isActivePath(pathname, item.href);
+                const active = activeHref === item.href;
                 return (
-                  <Link key={`${item.label}-${item.href}`} href={item.href} className={`schooliva-nav__item ${active ? "is-active" : ""}`} title={item.label} aria-current={active ? "page" : undefined}>
+                  <Link key={`${item.label}-${item.href}`} href={item.href} className={`schooliva-nav__item ${active ? "is-active" : ""}`} title={compact ? item.label : undefined} aria-current={active ? "page" : undefined}>
                     <span className="schooliva-nav__icon"><NavIcon name={item.icon} /></span>
                     <span className="schooliva-nav__text">{item.label}</span>
                   </Link>
@@ -274,6 +299,10 @@ export function SchoolivaShell({
         </header>
 
         <main className="schooliva-content">
+          <div className="workspace-print-brand" aria-hidden="true">
+            {schoolLogoUrl && <Image src={schoolLogoUrl} alt="" width={150} height={58} unoptimized />}
+            <strong>{schoolContext ?? "School workspace"}</strong>
+          </div>
           <header className={`page-header ${headerVariant === "dashboard" ? "page-header--dashboard" : ""}`}>
             <div>
               <p className="page-header__eyebrow">Schooliva</p>
@@ -284,6 +313,7 @@ export function SchoolivaShell({
           </header>
 
           {children}
+          <footer className="workspace-print-footer">Generated by Schooliva</footer>
         </main>
       </div>
     </div>

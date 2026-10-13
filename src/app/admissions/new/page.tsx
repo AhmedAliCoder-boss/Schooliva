@@ -24,13 +24,13 @@ export default async function NewAdmissionPage({ searchParams }: { searchParams:
   if (params.error && !formErrors[params.error]) redirect("/admissions/new");
 
   return (
-    <main style={{ margin: "0 auto", maxWidth: 1100, padding: "28px 20px 52px" }}>
-      {params.error && <p role="alert" style={{ background: "color-mix(in srgb, var(--brand-danger) 9%, var(--surface))", border: "1px solid color-mix(in srgb, var(--brand-danger) 28%, var(--line))", borderRadius: 10, color: "var(--brand-danger)", margin: "0 0 18px", padding: 14 }}>{formErrors[params.error]}</p>}
-      <div style={{ marginBottom: 20 }}>
+    <main className="admissions-page admissions-new-page">
+      {params.error && <p role="alert" className="admissions-alert admissions-alert--error">{formErrors[params.error]}</p>}
+      <div className="admissions-page-heading admissions-new-page__heading">
         <div>
-          <p style={{ color: "var(--brand-primary)", fontSize: 12, fontWeight: 750, letterSpacing: ".12em", margin: 0, textTransform: "uppercase" }}>Admissions</p>
-          <h1 style={{ color: "var(--brand-secondary)", fontSize: "clamp(28px, 5vw, 40px)", margin: "7px 0 0" }}>Create an application</h1>
-          <p style={{ color: "var(--ink-soft)", margin: "8px 0 0" }}>Applicant records are saved to this school&apos;s admissions register.</p>
+          <p className="admissions-eyebrow">Admissions / New applicant</p>
+          <h1>Create an application</h1>
+          <p>Applicant records are saved to this school&apos;s admissions register.</p>
         </div>
       </div>
       <AdmissionForm

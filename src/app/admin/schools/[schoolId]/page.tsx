@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { activateSchoolLifecycle, createSchoolUser, resetSchoolUserPassword, toggleSchoolUserStatus } from "@/app/actions/admin";
+import { activateSchoolLifecycle } from "@/app/actions/admin";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { SchoolBrandingEditor } from "@/components/admin/school-branding-editor";
 import { buildBrandingTheme, getSchoolBrandingForSchool } from "@/lib/school-branding";
@@ -62,10 +62,10 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
     supabase.from("school_trials").select("id,trial_name,status,starts_on,ends_on,seats").eq("school_id", schoolId).order("starts_on", { ascending: false }).limit(10),
   ]);
 
-  const { data: profiles } = await supabase.from("profiles").select("id,full_name,email,is_active,created_at").in("id", (memberships ?? []).map((row) => row.user_id));
+  const { data: profiles } = await supabase.from("profiles").select("id,application_user_id,full_name,email,account_status,created_at").in("id", (memberships ?? []).map((row) => row.user_id));
   const profileMap = new Map((profiles ?? []).map((row) => [String(row.id), row]));
   const storageUsed = (documents ?? []).reduce((sum, doc) => sum + Number(doc.file_size ?? 0), 0);
-  const activeMembers = (memberships ?? []).filter((row) => profileMap.get(String(row.user_id))?.is_active).length;
+  const activeMembers = (memberships ?? []).filter((row) => profileMap.get(String(row.user_id))?.account_status === "active").length;
   const activeContract = (contracts ?? [])[0];
   const activeTrial = (trials ?? [])[0];
   const lifecycleState = resolveSchoolLifecycle({
@@ -107,23 +107,8 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
         <div className="dashboard-card-heading">
           <div><span className="dashboard-panel-kicker">Create user</span><h2>Add account for this school</h2></div>
         </div>
-        <form action={createSchoolUser} className="student-form" style={{ marginTop: 12 }}>
-          <input type="hidden" name="schoolId" value={schoolId} />
-          <div className="student-form-grid">
-            <label className="student-field">Full name<input name="fullName" required /></label>
-            <label className="student-field">Username<input name="username" required /></label>
-            <label className="student-field">Email<input type="email" name="email" required /></label>
-            <label className="student-field">Password<input type="password" name="password" minLength={8} required /></label>
-            <label className="student-field">Role<select name="roleSlug" defaultValue="teacher">
-              <option value="teacher">Teacher</option>
-              <option value="staff">Staff</option>
-              <option value="school_admin">School Admin</option>
-              <option value="principal">Principal</option>
-              <option value="accountant">Accountant</option>
-            </select></label>
-          </div>
-          <button type="submit" className="dashboard-action dashboard-action--primary">Create User</button>
-        </form>
+        <p className="account-form-note">New users are created through Supabase Auth and linked to this school with a database-backed role.</p>
+        <Link className="admin-button admin-button--primary" href={`/admin/accounts/new?school=${schoolId}`}>Create school account</Link>
       </section>
 
       <section className="admin-panel" style={{ marginTop: 24 }}>
@@ -134,7 +119,7 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
           <table className="student-table">
             <thead>
               <tr>
-                <th>User ID</th>
+                <th>Application User ID</th>
                 <th>Name</th>
                 <th>Role</th>
                 <th>Status</th>
@@ -148,23 +133,12 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
                 const roleName = (membership.roles as { name?: string } | null)?.name ?? "Role";
                 return (
                   <tr key={String(membership.user_id)}>
-                    <td>{String(membership.user_id).slice(0, 8)}</td>
+                    <td>{profile?.application_user_id ?? "-"}</td>
                     <td>{profile?.full_name ?? "User"}</td>
                     <td>{roleName}</td>
-                    <td><span className={`status-pill ${profile?.is_active ? "active" : "inactive"}`}>{profile?.is_active ? "Active" : "Inactive"}</span></td>
+                    <td><span className={`status-pill ${profile?.account_status === "active" ? "active" : "inactive"}`}>{profile?.account_status ?? "Unknown"}</span></td>
                     <td>{profile ? new Date(String(profile.created_at)).toLocaleDateString() : "-"}</td>
-                    <td style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <form action={resetSchoolUserPassword}>
-                        <input type="hidden" name="email" value={profile?.email ?? ""} />
-                        <button type="submit" className="dashboard-action" disabled={!profile?.email}>Reset Password</button>
-                      </form>
-                      <form action={toggleSchoolUserStatus}>
-                        <input type="hidden" name="userId" value={String(membership.user_id)} />
-                        <input type="hidden" name="schoolId" value={schoolId} />
-                        <input type="hidden" name="enabled" value={profile?.is_active ? "false" : "true"} />
-                        <button type="submit" className="dashboard-action">{profile?.is_active ? "Deactivate" : "Activate"}</button>
-                      </form>
-                    </td>
+                    <td><Link className="admin-button" href={`/admin/accounts/${String(membership.user_id)}`}>Manage account</Link></td>
                   </tr>
                 );
               }) : <tr><td colSpan={6}><div className="student-empty"><h3>No accounts found</h3><p>No users are assigned to this school yet.</p></div></td></tr>}

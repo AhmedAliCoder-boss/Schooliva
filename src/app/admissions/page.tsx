@@ -1,98 +1,141 @@
+import Link from "next/link";
+
 import { requireAdmissionContext } from "@/lib/admissions/context";
-import { createClient } from "@/lib/supabase/server";
+
+type AdmissionStatus = {
+  id: string;
+  application_number: string;
+  applicant_name: string;
+  application_date: string;
+  status: string;
+  documents_status: string;
+  test_status: string;
+  interview_status: string;
+};
+
+function titleCase(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export default async function AdmissionsPage() {
-  const { schoolId } = await requireAdmissionContext("view");
-  const supabase = await createClient();
+  const { schoolId, supabase } = await requireAdmissionContext("view");
+  const [{ data: admissions, error }, { data: recentApplications, error: recentError }] = await Promise.all([
+    supabase
+      .from("admissions")
+      .select("id,application_number,applicant_name,application_date,status,documents_status,test_status,interview_status")
+      .eq("school_id", schoolId),
+    supabase
+      .from("admissions")
+      .select("id,application_number,applicant_name,application_date,status")
+      .eq("school_id", schoolId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+  ]);
 
-  const { data: admissions, error } = await supabase
-    .from("admissions")
-    .select("id, application_date, status, documents_status, test_status, interview_status")
-    .eq("school_id", schoolId)
-    .order("created_at", { ascending: false });
+  if (error || recentError) {
+    return (
+      <main className="admissions-page">
+        <section className="admissions-alert admissions-alert--error" role="alert">
+          <strong>Admissions overview is unavailable.</strong> {error?.message ?? recentError?.message}
+        </section>
+      </main>
+    );
+  }
 
-  const applications = admissions ?? [];
+  const applications = (admissions ?? []) as AdmissionStatus[];
   const totalApplications = applications.length;
-  const newApplications = applications.filter((admission) => {
-    const date = new Date(admission.application_date);
-    const now = new Date();
-    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-  }).length;
-  const countStatus = (status: string) => applications.filter((admission) => admission.status === status).length;
-  const underReview = countStatus("under_review");
-  const documentsPending = applications.filter((admission) => admission.documents_status === "pending" || admission.status === "documents_pending").length;
-  const testPending = applications.filter((admission) => admission.test_status === "pending" || admission.status === "test_pending").length;
-  const interviewPending = applications.filter((admission) => admission.interview_status === "pending" || admission.status === "interview_pending").length;
-  const approved = countStatus("approved");
-  const rejected = countStatus("rejected");
-  const waitlisted = countStatus("waitlisted");
-  const admitted = countStatus("admitted");
-  const convertedToStudent = countStatus("converted_to_student");
-
-  const cards = [
-    { label: "Total Applications", value: totalApplications },
-    { label: "New Applications", value: newApplications },
-    { label: "Under Review", value: underReview },
-    { label: "Documents Pending", value: documentsPending },
-    { label: "Test Pending", value: testPending },
-    { label: "Interview Pending", value: interviewPending },
-    { label: "Approved", value: approved },
-    { label: "Rejected", value: rejected },
-    { label: "Waitlisted", value: waitlisted },
-    { label: "Admitted", value: admitted },
-    { label: "Converted to Student", value: convertedToStudent },
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const newApplications = applications.filter((admission) => new Date(`${admission.application_date}T00:00:00`) >= monthStart).length;
+  const countStatuses = (...statuses: string[]) => applications.filter((admission) => statuses.includes(admission.status)).length;
+  const submitted = countStatuses("submitted");
+  const underReview = countStatuses("under_review", "documents_pending", "test_pending", "interview_pending");
+  const admitted = countStatuses("admitted", "converted_to_student");
+  const pendingDocuments = applications.filter((admission) => admission.documents_status === "pending" || admission.status === "documents_pending").length;
+  const pendingTests = applications.filter((admission) => admission.test_status === "pending" || admission.status === "test_pending").length;
+  const pendingInterviews = applications.filter((admission) => admission.interview_status === "pending" || admission.status === "interview_pending").length;
+  const statusRows = [
+    { label: "Draft", value: countStatuses("draft"), href: "/admissions/applications?status=draft" },
+    { label: "Submitted", value: submitted, href: "/admissions/applications?status=submitted" },
+    { label: "Under review", value: underReview, href: "/admissions/applications?status=review" },
+    { label: "Admitted", value: admitted, href: "/admissions/applications?status=admitted" },
   ];
 
   return (
-    <main style={{ display: 'grid', gap: 24, maxWidth: 1280, margin: '0 auto', padding: '24px 20px 48px' }}>
-      {error && <section className="admissions-alert admissions-alert--error" role="alert"><strong>Admissions summary is unavailable.</strong> {error.message}</section>}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <main className="admissions-page admissions-overview">
+      <section className="admissions-page-heading admissions-overview__heading">
         <div>
-          <p style={{ margin: 0, fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5b6472' }}>Admissions</p>
-          <h1 style={{ margin: '8px 0 0', fontSize: 36 }}>Admission dashboard</h1>
+          <p className="admissions-eyebrow">Admissions</p>
+          <h1>Admissions overview</h1>
+          <p>Track applications, follow up on pending steps, and welcome new students.</p>
         </div>
-      </header>
-
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-        {cards.map((card) => (
-          <div key={card.label} style={{ border: '1px solid #e4ebf5', borderRadius: 16, background: '#fff', padding: 18 }}>
-            <p style={{ margin: 0, color: '#5b6472', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{card.label}</p>
-            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 800, color: '#1d2a39' }}>{card.value}</p>
-          </div>
-        ))}
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
-        <div style={{ border: '1px solid #e4ebf5', borderRadius: 16, background: '#fff', padding: 20 }}>
-          <p style={{ margin: 0, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5b6472' }}>Applications by status</p>
-          <div style={{ marginTop: 18, display: 'grid', gap: 10 }}>
-            {[
-              ['Submitted', totalApplications],
-              ['Under review', underReview],
-              ['Approved', approved],
-              ['Rejected', rejected],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: 'grid', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#324459', fontSize: 14 }}>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </div>
-                <div style={{ height: 10, borderRadius: 99, background: '#eef3fb', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, (Number(value) / Math.max(totalApplications, 1)) * 100)}%`, height: '100%', borderRadius: 99, background: '#2d6cdf' }} />
-                </div>
-              </div>
+      <section className="admissions-overview__metrics" aria-label="Application summary">
+        <Link href="/admissions/applications" className="admissions-overview-metric">
+          <span>Total applications</span><strong>{totalApplications}</strong><small>All application records</small>
+        </Link>
+        <Link href="/admissions/applications" className="admissions-overview-metric">
+          <span>New this month</span><strong>{newApplications}</strong><small>Received this month</small>
+        </Link>
+        <Link href="/admissions/applications?status=review" className="admissions-overview-metric">
+          <span>In review</span><strong>{underReview}</strong><small>Review and assessment stages</small>
+        </Link>
+        <Link href="/admissions/applications?status=admitted" className="admissions-overview-metric">
+          <span>Admitted</span><strong>{admitted}</strong><small>Includes converted students</small>
+        </Link>
+      </section>
+
+      <section className="admissions-overview__grid">
+        <article className="admissions-card admissions-overview__pipeline">
+          <header className="admissions-overview-card-heading">
+            <div><p className="admissions-eyebrow">Pipeline</p><h2>Applications by stage</h2></div>
+            <Link href="/admissions/applications">Open register <span aria-hidden="true">→</span></Link>
+          </header>
+          <div className="admissions-overview__stage-list">
+            {statusRows.map((item) => (
+              <Link href={item.href} className="admissions-overview-stage" key={item.label}>
+                <span>{item.label}</span>
+                <span className="admissions-overview-stage__track" aria-hidden="true">
+                  <i style={{ width: `${totalApplications ? Math.min(100, (item.value / totalApplications) * 100) : 0}%` }} />
+                </span>
+                <strong>{item.value}</strong>
+              </Link>
             ))}
           </div>
-        </div>
+          {!totalApplications && <p className="admissions-overview__empty">Applications will appear here as they are created.</p>}
+        </article>
 
-        <div style={{ border: '1px solid #e4ebf5', borderRadius: 16, background: '#fff', padding: 20 }}>
-          <p style={{ margin: 0, fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5b6472' }}>Admissions overview</p>
-          <ul style={{ margin: '18px 0 0', paddingLeft: 18, color: '#425266', lineHeight: 1.8 }}>
-            <li>Applications are managed independently until accepted into the student register.</li>
-            <li>Document, assessment, interview, and decision stages reflect saved application records.</li>
-            <li>Admitted applicants can be converted into student records from their application.</li>
-          </ul>
-        </div>
+        <article className="admissions-card admissions-overview__follow-up">
+          <header className="admissions-overview-card-heading">
+            <div><p className="admissions-eyebrow">Follow-up</p><h2>Items needing attention</h2></div>
+          </header>
+          <div className="admissions-overview__follow-up-list">
+            <Link href="/admissions/applications?status=documents_pending"><span>Documents to review</span><strong>{pendingDocuments}</strong><span aria-hidden="true">→</span></Link>
+            <Link href="/admissions/applications?status=test_pending"><span>Assessments pending</span><strong>{pendingTests}</strong><span aria-hidden="true">→</span></Link>
+            <Link href="/admissions/applications?status=interview_pending"><span>Interviews pending</span><strong>{pendingInterviews}</strong><span aria-hidden="true">→</span></Link>
+          </div>
+        </article>
+
+        <article className="admissions-card admissions-overview__recent">
+          <header className="admissions-overview-card-heading">
+            <div><p className="admissions-eyebrow">Latest activity</p><h2>Recent applications</h2></div>
+            <Link href="/admissions/applications">View all <span aria-hidden="true">→</span></Link>
+          </header>
+          {recentApplications?.length ? (
+            <ul className="admissions-overview__recent-list">
+              {recentApplications.map((application) => (
+                <li key={application.id}>
+                  <Link href={`/admissions/${application.id}`}>
+                    <span><strong>{application.applicant_name}</strong><small>{application.application_number} · {new Date(`${application.application_date}T00:00:00`).toLocaleDateString()}</small></span>
+                    <span className={`admissions-status admissions-status--${application.status}`}>{titleCase(application.status)}</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="admissions-overview__empty">No applications yet. Start with a new application.</p>}
+        </article>
       </section>
     </main>
   );

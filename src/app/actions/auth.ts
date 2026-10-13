@@ -2,12 +2,12 @@
 
 import { redirect } from "next/navigation";
 
-import { canManageUserAccounts, getCurrentUser } from "@/lib/auth/authorization";
 import { getAuthErrorMessage } from "@/lib/auth/messages";
 import { isMasterAdminUser } from "@/lib/auth/roles";
-import { createAccountSchema, resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
+import { resetPasswordSchema, signInSchema, type AuthFormState } from "@/lib/auth/schemas";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { getSafeSiteOrigin, isSafeRelativePath } from "@/lib/security/validation";
+import { isSafeRelativePath } from "@/lib/security/validation";
 
 function getSafeNextPath(value: FormDataEntryValue | null) {
   return isSafeRelativePath(typeof value === "string" ? value : null) ? value as string : "/dashboard";
@@ -25,13 +25,30 @@ export async function signIn(_: AuthFormState | undefined, formData: FormData): 
 
   const supabase = await createClient();
   const identifier = parsed.data.login;
-  const { data: resolvedEmail, error: lookupError } = identifier.includes("@")
-    ? { data: identifier, error: null }
-    : await supabase.rpc("resolve_login_email", { login_identifier: identifier });
-  if (lookupError || !resolvedEmail) return { error: "Account nahi mila. Email ya admin drawer mein save kiya exact login username enter karein; 'School Admin' role ka naam hai, login username nahi." };
+  let resolvedEmail = identifier.includes("@") ? identifier : null;
+  if (!resolvedEmail) {
+    const adminClient = createSupabaseAdminClient();
+    if (!adminClient) return { error: "Username and User ID sign-in is temporarily unavailable. Contact your administrator." };
+    const { data, error: lookupError } = await adminClient.rpc("resolve_login_email", { login_identifier: identifier });
+    if (lookupError) return { error: "Username and User ID sign-in is temporarily unavailable. Contact your administrator." };
+    resolvedEmail = data;
+  }
+  if (!resolvedEmail) return { error: "Account nahi mila. Email ya admin drawer mein save kiya exact login username enter karein; 'School Admin' role ka naam hai, login username nahi." };
 
   const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password: parsed.data.password });
   if (error) return { error: getAuthErrorMessage(error.message) };
+
+  const { data: accountActive, error: accountStatusError } = await supabase.rpc("is_account_active", {
+    target_user_id: signInData.user.id,
+  });
+  if (accountStatusError || accountActive !== true) {
+    const { error: signOutError } = await supabase.auth.signOut();
+    return {
+      error: signOutError
+        ? "This account is inactive or suspended, and its session could not be cleared. Contact your administrator."
+        : "This account is inactive or suspended. Contact your administrator to restore access.",
+    };
+  }
 
   const requestedNextPath = formData.get("next");
   if (!requestedNextPath && signInData.user && await isMasterAdminUser(supabase, signInData.user.id)) {
@@ -39,50 +56,6 @@ export async function signIn(_: AuthFormState | undefined, formData: FormData): 
   }
 
   redirect(getSafeNextPath(requestedNextPath));
-}
-
-export async function createAccount(_: AuthFormState | undefined, formData: FormData): Promise<AuthFormState> {
-  const current = await getCurrentUser();
-  if (!current) return { error: "Only an authenticated admin can create user IDs or accounts." };
-
-  if (!(await canManageUserAccounts())) {
-    return { error: "Only an admin can create user IDs or accounts." };
-  }
-
-  const parsed = createAccountSchema.safeParse({
-    fullName: formData.get("fullName"),
-    username: formData.get("username"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    role: formData.get("role"),
-    developerName: formData.get("developerName"),
-    developerContact: formData.get("developerContact"),
-    investigationNotes: formData.get("investigationNotes"),
-  });
-
-  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
-
-  const supabase = await createClient();
-  const origin = getSafeSiteOrigin();
-  const { data, error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: {
-      data: {
-        full_name: parsed.data.fullName,
-        username: parsed.data.username,
-        requested_role: parsed.data.role,
-        developer_name: parsed.data.developerName,
-        developer_contact: parsed.data.developerContact,
-        investigation_notes: parsed.data.investigationNotes ?? "",
-      },
-      emailRedirectTo: `${origin}/auth/callback?next=/dashboard`,
-    },
-  });
-
-  if (error) return { error: getAuthErrorMessage(error.message) };
-  if (data.session) redirect(parsed.data.role === "principal" ? "/setup" : "/sign-in?message=Account%20create%20ho%20gaya.%20School%20access%20developer%20ya%20principal%20approve%20karega.");
-  return { success: "Account create ho gaya. Email confirm karke sign in karein." };
 }
 
 export async function signOut() {

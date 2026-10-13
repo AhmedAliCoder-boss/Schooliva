@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 
-import { createAdmission } from '@/app/actions/admissions';
+import { createAdmission, type CreateAdmissionState } from '@/app/actions/admissions';
 
 type AdmissionDraft = {
   applicantName: string;
@@ -12,6 +12,7 @@ type AdmissionDraft = {
   email: string;
   guardianName: string;
   guardianPhone: string;
+  guardianRelationship: string;
   address: string;
   classId: string;
   sessionId: string;
@@ -39,6 +40,7 @@ export function AdmissionForm({
   sessions: Array<{ id: string; name: string; isCurrent: boolean }>;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [state, formAction, isPending] = useActionState<CreateAdmissionState, FormData>(createAdmission, undefined);
   const [draft, setDraft] = useState<AdmissionDraft>({
     applicantName: '',
     dateOfBirth: '',
@@ -47,6 +49,7 @@ export function AdmissionForm({
     email: '',
     guardianName: '',
     guardianPhone: '',
+    guardianRelationship: 'guardian',
     address: '',
     classId: '',
     sessionId: sessions.find((session) => session.isCurrent)?.id ?? '',
@@ -60,24 +63,25 @@ export function AdmissionForm({
 
   const selectedClass = classes.find((item) => item.id === draft.classId)?.name ?? 'Not selected';
   const selectedSession = sessions.find((item) => item.id === draft.sessionId)?.name ?? 'Not selected';
+  const errorStep = state?.step;
 
   return (
-    <section style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, boxShadow: 'var(--shadow-soft)', overflow: 'hidden' }}>
-      <div style={{ borderBottom: '1px solid var(--line)', padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+    <section className="admission-form-card">
+      <div className="admission-form-card__header">
+        <div className="admission-form-card__step-heading">
           <div>
-            <p style={{ color: 'var(--brand-primary)', fontSize: 12, fontWeight: 750, letterSpacing: '.1em', margin: 0, textTransform: 'uppercase' }}>New application</p>
-            <h2 style={{ color: 'var(--brand-secondary)', fontSize: 22, margin: '7px 0 0' }}>{steps[stepIndex]}</h2>
+            <p className="admissions-eyebrow">Application details</p>
+            <h2>{steps[stepIndex]}</h2>
           </div>
-          <span style={{ color: 'var(--ink-soft)', fontSize: 13, paddingTop: 4 }}>Step {stepIndex + 1} of {steps.length}</span>
+          <span>Step {stepIndex + 1} of {steps.length}</span>
         </div>
-        <div aria-hidden="true" style={{ background: 'var(--surface-soft)', borderRadius: 99, height: 5, marginTop: 16, overflow: 'hidden' }}>
-          <div style={{ background: 'var(--brand-primary)', height: '100%', transition: 'width .2s ease', width: `${((stepIndex + 1) / steps.length) * 100}%` }} />
+        <div className="admission-form-progress" role="progressbar" aria-label="Application form progress" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={stepIndex + 1}>
+          <span style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} />
         </div>
       </div>
 
       <form
-        action={createAdmission}
+        action={formAction}
         onSubmit={(event) => {
           const submitter = (event.nativeEvent as SubmitEvent).submitter;
           if (submitter instanceof HTMLButtonElement && submitter.name === 'status') return;
@@ -86,8 +90,16 @@ export function AdmissionForm({
             setStepIndex((current) => Math.min(current + 1, steps.length - 1));
           }
         }}
-        style={{ display: 'grid', gap: 20, padding: 20 }}
+        className="admission-form"
       >
+        {state?.error && (
+          <div className="admissions-alert admissions-alert--error admission-form__error" role="alert">
+            <span>{state.error}</span>
+            {errorStep !== undefined && errorStep !== stepIndex && (
+              <button type="button" onClick={() => setStepIndex(errorStep)}>Edit this section</button>
+            )}
+          </div>
+        )}
         <input type="hidden" name="applicationData" value={JSON.stringify(draft)} />
         {stepIndex === 0 && (
           <div style={fieldGridStyle}>
@@ -121,6 +133,14 @@ export function AdmissionForm({
             </Field>
             <Field label="Guardian phone">
               <input name="guardianPhone" type="tel" value={draft.guardianPhone} onChange={(event) => updateField('guardianPhone', event.currentTarget.value)} style={inputStyle} autoComplete="tel" />
+            </Field>
+            <Field label="Relationship to student">
+              <select name="guardianRelationship" value={draft.guardianRelationship} onChange={(event) => updateField('guardianRelationship', event.currentTarget.value)} style={inputStyle}>
+                <option value="father">Father</option>
+                <option value="mother">Mother</option>
+                <option value="guardian">Guardian</option>
+                <option value="other">Other</option>
+              </select>
             </Field>
             <Field label="Home address">
               <textarea name="address" value={draft.address} onChange={(event) => updateField('address', event.currentTarget.value)} style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }} autoComplete="street-address" />
@@ -158,15 +178,16 @@ export function AdmissionForm({
         )}
 
         {stepIndex === 3 && (
-          <div style={{ background: 'var(--surface-soft)', border: '1px solid var(--line)', borderRadius: 12, padding: 18 }}>
-            <h3 style={{ color: 'var(--brand-secondary)', margin: '0 0 14px' }}>{draft.applicantName || 'Applicant details'}</h3>
-            <dl style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', margin: 0 }}>
+          <div className="admission-review">
+            <h3>{draft.applicantName || 'Applicant details'}</h3>
+            <dl>
               <SummaryItem label="Date of birth" value={draft.dateOfBirth || 'Not provided'} />
               <SummaryItem label="Gender" value={draft.gender.replaceAll('_', ' ')} />
               <SummaryItem label="Phone" value={draft.phone || 'Not provided'} />
               <SummaryItem label="Email" value={draft.email || 'Not provided'} />
               <SummaryItem label="Parent / guardian" value={draft.guardianName || 'Not provided'} />
               <SummaryItem label="Guardian phone" value={draft.guardianPhone || 'Not provided'} />
+              <SummaryItem label="Relationship to student" value={draft.guardianRelationship.replaceAll('_', ' ')} />
               <SummaryItem label="Class" value={selectedClass} />
               <SummaryItem label="Academic session" value={selectedSession} />
               <SummaryItem label="Source" value={draft.source.replaceAll('_', ' ')} />
@@ -176,13 +197,13 @@ export function AdmissionForm({
           </div>
         )}
 
-        <div style={{ borderTop: '1px solid var(--line)', display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', paddingTop: 16 }}>
+        <div className="admission-form__actions">
           <button type="button" disabled={stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(current - 1, 0))} style={buttonStyle(false)}>{'← Previous'}</button>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button type="submit" name="status" value="draft" formNoValidate style={buttonStyle(false)}>Save as draft</button>
+            <button type="submit" name="status" value="draft" formNoValidate disabled={isPending} style={buttonStyle(false)}>{isPending ? 'Saving…' : 'Save as draft'}</button>
             {stepIndex < steps.length - 1
-              ? <button type="submit" style={buttonStyle(true)}>Continue →</button>
-              : <button type="submit" name="status" value="submitted" style={buttonStyle(true)}>Submit application</button>}
+              ? <button type="submit" disabled={isPending} style={buttonStyle(true)}>Continue →</button>
+              : <button type="submit" name="status" value="submitted" disabled={isPending} style={buttonStyle(true)}>{isPending ? 'Submitting…' : 'Submit application'}</button>}
           </div>
         </div>
       </form>
@@ -191,19 +212,19 @@ export function AdmissionForm({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label style={{ color: 'var(--brand-secondary)', display: 'grid', fontSize: 13, fontWeight: 650, gap: 8 }}>{label}{children}</label>;
+  return <label className="admission-form__field">{label}{children}</label>;
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
-  return <div><dt style={{ color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase' }}>{label}</dt><dd style={{ color: 'var(--foreground)', fontSize: 14, margin: '4px 0 0', overflowWrap: 'anywhere' }}>{value}</dd></div>;
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
 function buttonStyle(primary: boolean): React.CSSProperties {
   return {
-    background: primary ? 'var(--brand-primary)' : 'var(--surface)',
-    border: `1px solid ${primary ? 'var(--brand-primary)' : 'var(--line)'}`,
-    borderRadius: 9,
-    color: primary ? '#fff' : 'var(--brand-secondary)',
+    background: primary ? '#26374a' : '#fff',
+    border: `1px solid ${primary ? '#26374a' : '#d6dce3'}`,
+    borderRadius: 7,
+    color: primary ? '#fff' : '#334155',
     cursor: 'pointer',
     font: 'inherit',
     fontSize: 13,

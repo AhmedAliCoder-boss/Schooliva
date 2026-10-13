@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { saveFeeStructure, saveInvoice, savePayment } from "@/app/actions/finance";
+import { saveExpense, saveFeeStructure, saveInvoice, savePayment } from "@/app/actions/finance";
 import { SubmitButton } from "@/components/auth/submit-button";
 import type { FinanceFormState } from "@/lib/finance/schemas";
 
@@ -22,10 +22,28 @@ export function FeeStructureForm({ sessions, classes }: { sessions: Option[]; cl
 
 export function InvoiceForm({ sessions, students, feeStructures }: { sessions: Option[]; students: Option[]; feeStructures: Option[] }) {
   const [state, action] = useActionState(saveInvoice, undefined);
-  return <form action={action} className="student-form"><Feedback state={state} /><div className="student-form-grid"><Select label="Academic session" name="academicSessionId" options={sessions} /><Select label="Student" name="studentId" options={students} /><label className="student-field">Due date<input name="dueDate" type="date" required /></label><label className="student-field">Items<select name="feeStructureIds" multiple><option value="">Select items</option>{feeStructures.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="student-field">Notes<textarea name="notes" rows={3} /></label></div><SubmitButton>Create invoice</SubmitButton></form>;
+  return <form action={action} className="student-form"><Feedback state={state} /><div className="student-form-grid"><Select label="Academic session" name="academicSessionId" options={sessions} /><Select label="Student" name="studentId" options={students} /><label className="student-field">Due date<input name="dueDate" type="date" required /></label><fieldset className="student-field finance-fee-options"><legend>Fee items</legend>{feeStructures.length ? feeStructures.map((item) => <label key={item.id}><input type="checkbox" name="feeStructureIds" value={item.id} /><span>{item.name}</span></label>) : <p>Add an active fee structure before creating invoices.</p>}</fieldset><label className="student-field">Notes<textarea name="notes" rows={3} /></label></div><SubmitButton>Create invoice</SubmitButton></form>;
 }
 
 export function PaymentForm({ invoices }: { invoices: Option[] }) {
   const [state, action] = useActionState(savePayment, undefined);
   return <form action={action} className="student-form"><Feedback state={state} /><div className="student-form-grid"><Select label="Invoice" name="invoiceId" options={invoices} /><label className="student-field">Amount<input name="amount" type="number" min="0.01" step="0.01" required /></label><label className="student-field">Payment method<select name="paymentMethod" required><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="card">Card</option><option value="upi">UPI</option><option value="cheque">Cheque</option><option value="other">Other</option></select></label><label className="student-field">Payment date<input name="paymentDate" type="date" required /></label><label className="student-field">Notes<textarea name="notes" rows={3} /></label></div><SubmitButton>Record payment</SubmitButton></form>;
+}
+
+export function ExpenseForm() {
+  const [state, action] = useActionState(saveExpense, undefined);
+  return <form action={action} className="student-form">
+    <Feedback state={state} />
+    <div className="student-form-grid">
+      <label className="student-field">Category<select name="category" required><option value="">Select category</option><option value="salary">Salary</option><option value="utilities">Utilities</option><option value="supplies">Supplies</option><option value="maintenance">Maintenance</option><option value="transport">Transport</option><option value="other">Other</option></select></label>
+      <label className="student-field">Description<input name="description" maxLength={160} required /></label>
+      <label className="student-field">Vendor / payee<input name="vendor" maxLength={120} /></label>
+      <label className="student-field">Amount<input name="amount" type="number" min="0.01" step="0.01" required /></label>
+      <label className="student-field">Payment method<select name="paymentMethod" required><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="card">Card</option><option value="upi">UPI</option><option value="cheque">Cheque</option><option value="other">Other</option></select></label>
+      <label className="student-field">Expense date<input name="expenseDate" type="date" required /></label>
+      <label className="student-field">Reference<input name="reference" maxLength={80} /></label>
+      <label className="student-field">Notes<textarea name="notes" rows={3} maxLength={500} /></label>
+    </div>
+    <SubmitButton>Save expense</SubmitButton>
+  </form>;
 }

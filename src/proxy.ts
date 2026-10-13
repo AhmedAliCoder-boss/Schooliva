@@ -8,6 +8,8 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/admin/:path*",
+    "/users/:path*",
     "/dashboard/:path*",
     "/profile/:path*",
     "/students/:path*",

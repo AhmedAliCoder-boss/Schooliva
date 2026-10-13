@@ -5,7 +5,10 @@ import { accountProfileSchema, getAccountProfileValidationError } from "../../sr
 const validProfile = {
   schoolId: "11111111-1111-4111-8111-111111111111",
   userId: "22222222-2222-4222-8222-222222222222",
+  applicationUserId: "USER-000123",
   fullName: "School Admin",
+  firstName: "School",
+  lastName: "Admin",
   username: "mbs.admin",
   phone: "",
   roleId: "33333333-3333-4333-8333-333333333333",
@@ -23,6 +26,17 @@ describe("admin account profile validation", () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(getAccountProfileValidationError(result.error.issues)).toBe("invalid-username");
+      }
+    },
+  );
+
+  it.each(["a/b", "ab", "x".repeat(41)])(
+    "rejects an invalid changeable application user ID",
+    (applicationUserId) => {
+      const result = accountProfileSchema.safeParse({ ...validProfile, applicationUserId });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(getAccountProfileValidationError(result.error.issues)).toBe("invalid-application-user-id");
       }
     },
   );

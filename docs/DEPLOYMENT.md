@@ -23,7 +23,7 @@ Set these as encrypted hosting variables for Production, Preview, and Developmen
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase publishable/anon key only
 - `NEXT_PUBLIC_SITE_URL`: canonical HTTPS application origin, for example `https://schooliva.example`
 - `ADMIN_CONTACT_EMAIL`: administrator email address used by the sign-in help form's email draft. Configure it for local and production environments.
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase service-role key required for admins to set another user's password directly. Keep it encrypted in the hosting provider and never use a `NEXT_PUBLIC_` prefix.
+- `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase service-role key required for managed account creation and Auth email/password/status operations, private profile-photo administration, and resolving username/User-ID sign-ins. Keep it encrypted in the hosting provider and never use a `NEXT_PUBLIC_` prefix.
 
 Direct admin password updates remain unavailable until `SUPABASE_SERVICE_ROLE_KEY` is configured for the server environment. The key is used only by the server-side Supabase Auth Admin API; it is never sent to the browser.
 
@@ -51,11 +51,17 @@ npm run dev
 ```powershell
 supabase login
 supabase link --project-ref <project-ref>
-supabase db push
+supabase migration list --linked
+supabase db push --linked --skip-vault
 ```
 
-6. Review the migration output and confirm all migrations are applied in order. The Admissions module requires both `20261005000100_admissions_module.sql` and `20261005000200_admissions_workflows.sql`; deploy them before opening Admissions, or the API will report that `public.admissions` is missing from the schema cache.
-   The `20261006000100_dashboard_profiles_and_user_management.sql` migration adds the private profile-avatar bucket and the permission-checked school account role update function.
+6. Confirm that the linked project is the intended live Supabase project and review the migration list before pushing. `--skip-vault` avoids changing project Vault secrets as a side effect. Confirm every migration is applied afterward. The Admissions module requires both `20261005000100_admissions_module.sql` and `20261005000200_admissions_workflows.sql`; deploy them before opening Admissions, or the API will report that `public.admissions` is missing from the schema cache.
+   `20261006000100_dashboard_profiles_and_user_management.sql` adds the private profile-avatar bucket. `20261006000200_account_management_rebuild.sql` extends the existing profiles/RBAC schema with unique application User IDs, account statuses, scoped account-management RPCs, and account audit history; apply it before deploying code that calls those RPCs. `20261011000600_hrm_employee_id_format.sql` aligns HRM employee codes with the school-prefixed User ID sequence. `20261011000700_hrm_account_requests_and_scoped_creation.sql` adds Master Admin-reviewed employee-account requests, separates hiring from login creation, and limits direct School Admin account creation to lower-level roles within the selected school. `20261011000800_hrm_employee_document_upload_review.sql` adds school-scoped employee-document upload policies and document verification states. Apply all HRM migrations before deploying the HRM account and verification workflow. Employee verification uploads are submitted one file per request; keep each file within the configured 5 MB limit. `20261010000100_school_expenses.sql` adds the school-scoped expense register and its finance-permission RLS policies; apply it before deploying the Finance expenses page. `20261010000200_school_payroll.sql` adds payroll policies, compensation, attendance-based runs, and salary-expense settlement. `20261010000300_payroll_policy_snapshot.sql` preserves each payroll run's attendance deduction rules for itemized salary slips; apply both payroll migrations before deploying payroll pages. `20261012000100_enforce_school_timetable_working_days.sql` adds school-scoped working-day configuration and database enforcement for active timetable lessons; apply it before deploying the timetable working-days controls. `20261012000200_exam_timetable_terms_examiners.sql` adds term and examiner assignments to exam schedules and prevents examiner time conflicts; apply before deploying the exam timetable builder.
+   `20261012000300_exam_workflow_gates.sql` enforces the exam plan → timetable → marking → review → publish stages in the database, including complete section scheduling and marks before advancing.
+   `20261012000400_exam_type_access_policies.sql` restores the school-scoped exam-type read and manager policies required to create exam types and select them when creating exams.
+   `20261012000500_teacher_subject_hire_assignments.sql` records subject, academic session, and optional class assignments atomically when a teacher is hired; apply it before deploying the updated HRM hiring form.
+   `20261012000600_timetable_teacher_assignment_read_policy.sql` allows timetable viewers to read the teacher-subject assignments needed to offer class- and session-appropriate teachers in lesson schedules.
+   `20261012000700_add_exam_subject_to_class.sql` lets exam managers select any active school subject and atomically add it to the exam class and shared class-subject catalog.
 7. Run `supabase test db` after installing the CLI and pgTAP support. The Phase 27 and Phase 29 database tests check RLS, integrity, and storage configuration.
 8. Create separate production verification users for administrator, teacher, parent, student, accountant, librarian, transport manager, and inventory manager workflows. Do not reuse real user accounts.
 
@@ -98,6 +104,8 @@ Run the Playwright suite against the deployed preview with `npm run test:e2e` an
 - [ ] RLS and RBAC integration tests pass with separate schools
 - [ ] storage bucket and object policy checks pass
 - [ ] sign-in, recovery, sign-out, and protected redirects work
+- [ ] Master Admin and school account-manager workflows respect platform and school boundaries
+- [ ] account creation, status changes, username/User-ID login, and account audit entries are smoke-tested with a dedicated non-production account
 - [ ] student, parent, teacher, accountant, finance, admissions, attendance, timetable, exams, results, homework, library, transport, inventory, notifications, documents, and reports workflows pass
 - [ ] backups and recovery owner are assigned
 - [ ] monitoring, error reporting, and rollback plan are documented

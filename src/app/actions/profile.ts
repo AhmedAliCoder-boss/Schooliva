@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { isSupportedProfileImage } from "@/lib/security/profile-image";
 import { createClient } from "@/lib/supabase/server";
 
 export type ProfileFormState = { error?: string; success?: string };
@@ -24,12 +25,7 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
     const extension = extensionByType[avatar.type];
     if (!extension) return { error: "Profile photo JPG, PNG ya WebP format mein honi chahiye." };
     if (avatar.size > 5 * 1024 * 1024) return { error: "Profile photo 5 MB se chhoti honi chahiye." };
-    const bytes = new Uint8Array(await avatar.arrayBuffer());
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    const isPng = bytes.subarray(0, 8).join(",") === "137,80,78,71,13,10,26,10";
-    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
-      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-    if (!(avatar.type === "image/jpeg" && isJpeg) && !(avatar.type === "image/png" && isPng) && !(avatar.type === "image/webp" && isWebp)) {
+    if (!await isSupportedProfileImage(avatar)) {
       return { error: "Profile photo file ka format verify nahi ho saka." };
     }
 
@@ -56,14 +52,22 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
     return { error: "Profile read nahi ho saki. Dobara try karein." };
   }
 
-  const { error } = await supabase.from("profiles").update({
-    full_name: fullName,
-    username,
-    phone: phone || null,
-    ...(uploadedPath ? { avatar_path: uploadedPath } : {}),
-  }).eq("id", user.id);
+  const nameParts = fullName.split(/\s+/);
+  const firstName = nameParts[0] ?? "";
+  const lastName = nameParts.slice(1).join(" ");
+  const { error } = await supabase.rpc("update_own_profile", {
+    target_full_name: fullName,
+    target_username: username,
+    target_first_name: firstName,
+    target_last_name: lastName,
+    target_phone: phone,
+    target_avatar_path: uploadedPath,
+  });
   if (error) {
-    if (uploadedPath) await supabase.storage.from("profile-avatars").remove([uploadedPath]);
+    if (uploadedPath) {
+      const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove([uploadedPath]);
+      if (cleanupError) return { error: "Profile update failed, and the uploaded photo could not be removed." };
+    }
     if (error.code === "23505") return { error: "Ye username pehle se kisi aur account ke paas hai." };
     return { error: "Profile update nahi ho saki. Dobara try karein." };
   }
