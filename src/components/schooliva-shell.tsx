@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { signOut } from "@/app/actions/auth";
 import { GlobalSearchBar } from "@/components/search/global-search";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { LiveClock } from "@/components/dashboard/live-clock";
 import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
 import { getActiveHref } from "@/lib/navigation/active-path";
@@ -62,6 +63,7 @@ export const navGroups = [
       { label: "Library", href: "/library", icon: "library" },
       { label: "Transport", href: "/transport", icon: "transport" },
       { label: "Inventory", href: "/inventory", icon: "inventory" },
+      { label: "Food & Cafeteria", href: "/cafeteria", icon: "cafeteria" },
     ],
   },
   {
@@ -129,6 +131,8 @@ export function NavIcon({ name }: { name: string }) {
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M3 14V8.5A2.5 2.5 0 0 1 5.5 6H17l3 4v4M6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm12 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM3 14h18" /></svg>;
     case "inventory":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5zm8 4.5v9m-8-9 8 4.5 8-4.5M12 3v9" /></svg>;
+    case "cafeteria":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 4v7a3 3 0 0 0 6 0V4M7 4v16M17 4c-2 2-3 4.2-3 7h3v9m0-9c2-2.5 2.5-4.8 2-7" /></svg>;
     case "leave":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M4 12h16M12 4v16M6 6.5C7.5 5 9.6 4 12 4c3.2 0 5.7 1.7 7 4.5M18 17.5C16.5 19 14.4 20 12 20c-3.2 0-5.7-1.7-7-4.5" /></svg>;
     case "notifications":
@@ -284,10 +288,7 @@ export function SchoolivaShell({
             {schoolContext && <span className="schooliva-school-context">Viewing School: <strong>{schoolContext}</strong></span>}
             {schoolContextAction}
             <GlobalSearchBar compact />
-            <Link href="/notifications" className="schooliva-icon-button schooliva-notification-button" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ""}`}>
-              <span aria-hidden="true">&#9673;</span>
-              {unreadNotifications > 0 && <b>{unreadNotifications > 9 ? "9+" : unreadNotifications}</b>}
-            </Link>
+            <NotificationBell initialUnreadCount={unreadNotifications} />
             <Link href="/profile" className="schooliva-user" aria-label="View profile">
               <span className="schooliva-user__avatar">{userAvatarUrl
                 ? <Image src={userAvatarUrl} alt="" width={34} height={34} unoptimized />

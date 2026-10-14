@@ -48,7 +48,25 @@ export async function bootstrapSchool(_: SetupFormState | undefined, formData: F
 export async function updateSchool(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
   const parsed = schoolProfileSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
-  const { error } = await supabase.from("schools").update({ name: parsed.data.name, slug: parsed.data.slug, code: parsed.data.code, email: parsed.data.email || null, phone: parsed.data.phone || null, website: formData.get("website")?.toString().trim() || null, address: formData.get("address")?.toString().trim() || null }).eq("id", schoolId);
+  const { error } = await supabase.from("schools").update({
+    name: parsed.data.name,
+    short_name: parsed.data.shortName || null,
+    slug: parsed.data.slug,
+    code: parsed.data.code,
+    school_type: parsed.data.schoolType || null,
+    campus: parsed.data.campus || null,
+    board: parsed.data.board || null,
+    medium: parsed.data.medium || null,
+    principal: parsed.data.principal || null,
+    established_year: parsed.data.establishedYear ?? null,
+    email: parsed.data.email || null,
+    phone: parsed.data.phone || null,
+    website: parsed.data.website || null,
+    address: parsed.data.address || null,
+    city: parsed.data.city || null,
+    state: parsed.data.state || null,
+    country: parsed.data.country || null,
+  }).eq("id", schoolId);
   if (error) return { error: error.code === "23505" ? "Slug ya code already use ho raha hai." : "School profile update nahi hui." };
   revalidatePath("/setup"); return { success: "School profile save ho gayi." };
 }
@@ -56,7 +74,12 @@ export async function updateSchool(_: SetupFormState | undefined, formData: Form
 export async function updateSettings(_: SetupFormState | undefined, formData: FormData): Promise<SetupFormState> {
   const parsed = settingsSchema.safeParse(values(formData)); if (!parsed.success) return invalid(parsed.error, formData);
   const { supabase, schoolId } = await requireSetupContext();
-  const { error } = await supabase.from("school_settings").update({ timezone: parsed.data.timezone, currency_code: parsed.data.currency, date_format: parsed.data.dateFormat }).eq("school_id", schoolId);
+  const { error } = await supabase.from("school_settings").update({
+    timezone: parsed.data.timezone,
+    currency_code: parsed.data.currency,
+    date_format: parsed.data.dateFormat,
+    academic_year: parsed.data.academicYear || null,
+  }).eq("school_id", schoolId);
   if (error) return { error: "School settings save nahi hui." };
   revalidatePath("/setup"); return { success: "Settings save ho gayi." };
 }

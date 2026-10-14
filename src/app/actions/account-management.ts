@@ -21,6 +21,7 @@ const SCHOOL_ADMIN_CREATABLE_ROLE_SLUGS = [
   "hr_manager",
   "librarian",
   "transport_manager",
+  "cafeteria_manager",
   "staff",
 ] as const;
 const passwordSchema = z.object({
@@ -296,7 +297,7 @@ export async function createManagedAccount(
       || (targetRole.school_id != null && targetRole.school_id !== parsed.data.schoolId)
       || !SCHOOL_ADMIN_CREATABLE_ROLE_SLUGS.includes(targetRole.slug as (typeof SCHOOL_ADMIN_CREATABLE_ROLE_SLUGS)[number])
     ) {
-      return errorState("School Admins can only create Teacher, Staff, Accountant, HR, Library, or Transport accounts for their school.");
+      return errorState("School Admins can only create Teacher, Staff, Accountant, HR, Library, Transport, or Cafeteria accounts for their school.");
     }
   }
 

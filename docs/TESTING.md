@@ -10,7 +10,7 @@ Run with `npm run test:unit`. These tests are deterministic and do not need Supa
 - upload MIME and size validation
 - fee structure, invoice, and payment schema validation
 - positive payment amounts, supported methods, UUIDs, and due-day bounds
-- SLC/TC student identity, certificate dates, leaving details, and fee status validation
+- SLC/TC and School Completion Certificate identity, certificate dates, leaving/completion details, and fee status validation
 
 Unit tests belong in `tests/unit` and should cover pure validators, calculations, parsers, and view-model mapping.
 
@@ -79,15 +79,16 @@ Run with `npm run test:e2e`. Set `E2E_BASE_URL`, `E2E_USER_EMAIL`, and `E2E_USER
 | Timetable | time/range validation | class/teacher/student scope | view timetable |
 | Exams and results | per-section schedule coverage and aggregate workflow status; unambiguous marks-guard variables; weighted report-card totals, class positions, 40% default pass marks, and published pass/fail/position-holder statistics | marks are limited to submitted sections; published-results visibility | submit, mark, review, and publish sections independently; search published exams and filter by academic session; verify overview statistics follow filters; search published students by name, ID, class, or section; open and print individual reports; verify an eight-subject report fits one A4 page |
 | Results | mark range calculations | parent/student visibility | published results |
-| Fees | invoice/payment schemas and totals | parent/student/accountant scope | invoice and payment flow |
+| Fees | invoice/payment schemas and totals; anchored monthly/quarterly/yearly schedules, class/section paid-pending-partial statistics, and management invoice line items | parent/student/accountant scope | manual invoices and payments; verify paid, pending, and partially paid counts and amounts per class and section while changing filters; schedule an enrolled student, verify joining-date catch-up and daily due generation, pause/resume the schedule, and print an itemized non-student management invoice |
 | Payments | positive amount/reference rules | duplicate and overpayment rejection | record payment |
 | Homework | assignment schemas | class/section/student scope | create, submit, review |
 | Library | circulation state rules | member and librarian scope | issue, return, unavailable copy |
-| Transport | assignment validation | route/student scope | route assignment |
+| Transport | fleet bounds, stop coordinates and sequence times, assignment status, fee bounds | school-scoped fleet, route, stop, student, and fee access; capacity guard and route-stop membership | create fleet/driver/route, sequence stops, assign a student within capacity, change assignment/vehicle status, review fee plans |
 | Inventory | quantity calculations | manager/report access | stock in/out and low stock |
-| Notifications | payload validation | recipient-only reads | unread and mark-read |
+| Food & Cafeteria | menu, date, stock movement, recipe, order-line, and payment validation | school-scoped cafeteria manager access; atomic recipe stock deduction, daily portion caps, order status transitions, and no overpayment | schedule today's menu, configure recipe ingredients, accept a multi-item sale, verify stock deduction and partial/full payment collection, advance preparing → ready → served, and confirm low-stock alerts |
+| Notifications | role announcement validation, event recipient mapping | recipient-only reads, active-role targeting, per-event opt-out | poll the global bell from dashboard and other workspaces, confirm new items open an on-screen alert, mark one/all read, send announcements to selected active roles, and verify absence/invoice/payment/assignment/leave notifications reach the intended accounts |
 | Documents | upload validation | owner/role/storage scope | upload and download |
-| Reports | filter parsing | permission and tenant scope | report access/export |
+| Reports | filter parsing, invalid date/UUID handling, and bounded date ranges | report RPC and filter-option access are permission-checked and school-scoped | compare all-school and class/section/session-filtered summaries; verify attendance, fee, results, and inventory breakdowns; export the same filtered data to CSV and print the branded A4 landscape report |
 
 ## Failure policy
 

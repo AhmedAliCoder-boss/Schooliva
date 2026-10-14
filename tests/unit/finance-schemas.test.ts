@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { expenseSchema, feeStructureDeleteSchema, feeStructureSchema, feeStructureStatusSchema, invoiceSchema, paymentSchema } from "../../src/lib/finance/schemas";
+import {
+  expenseSchema,
+  feeStructureDeleteSchema,
+  feeStructureSchema,
+  feeStructureStatusSchema,
+  invoiceSchema,
+  managementInvoiceSchema,
+  paymentSchema,
+  studentInvoiceScheduleSchema,
+} from "../../src/lib/finance/schemas";
 
 describe("finance validation", () => {
   const sessionId = "00000000-0000-4000-8000-000000000001";
@@ -28,6 +37,14 @@ describe("finance validation", () => {
       isOptional: "false",
       isActive: "false",
     })).toMatchObject({ isOptional: false, isActive: false });
+    expect(feeStructureSchema.parse({
+      academicSessionId: sessionId,
+      classId: "all",
+      feeType: "tuition",
+      amount: "100",
+      frequency: "monthly",
+      dueDay: "1",
+    }).classId).toBe("all");
   });
 
   it("rejects invalid identifiers and negative amounts", () => {
@@ -81,6 +98,42 @@ describe("finance validation", () => {
       amount: "-1",
       paymentMethod: "crypto",
       expenseDate: "2026-09-16",
+    }).success).toBe(false);
+  });
+
+  it("validates recurring invoice plans and itemized management invoices", () => {
+    const studentId = "70000000-0000-0000-0000-000000000001";
+    const structureId = "50000000-0000-0000-0000-000000000001";
+    expect(studentInvoiceScheduleSchema.parse({
+      studentId,
+      academicSessionId: sessionId,
+      frequency: "quarterly",
+      feeStructureIds: [structureId],
+    }).frequency).toBe("quarterly");
+    expect(studentInvoiceScheduleSchema.safeParse({
+      studentId,
+      academicSessionId: sessionId,
+      frequency: "term",
+      feeStructureIds: [],
+    }).success).toBe(false);
+    expect(managementInvoiceSchema.parse({
+      recipientName: "Transport provider",
+      recipientEmail: "",
+      dueDate: "2026-10-30",
+      itemDescription: ["Bus hire", "Fuel"],
+      itemQuantity: ["2", "1"],
+      itemUnitPrice: ["5000", "1500.50"],
+    })).toMatchObject({
+      itemDescription: ["Bus hire", "Fuel"],
+      itemQuantity: [2, 1],
+      itemUnitPrice: [5000, 1500.5],
+    });
+    expect(managementInvoiceSchema.safeParse({
+      recipientName: "Transport provider",
+      dueDate: "2026-10-30",
+      itemDescription: ["Bus hire"],
+      itemQuantity: ["2", "1"],
+      itemUnitPrice: ["5000"],
     }).success).toBe(false);
   });
 });

@@ -6,7 +6,11 @@ export async function requireTransportContext(action: "manage" | "view") {
   const current = await requireUser();
   const { schoolId, isMasterAdmin } = await getActiveSchoolContext(current.supabase, current.user.id);
   if (!schoolId) redirect(isMasterAdmin ? "/admin" : "/setup?onboarding=1");
-  const { data: allowed } = await current.supabase.rpc("has_permission", { target_school_id: schoolId, target_resource: "transport", target_action: action });
+  const { data: allowed, error } = await current.supabase.rpc("has_permission", { target_school_id: schoolId, target_resource: "transport", target_action: action });
+  if (error) {
+    console.error("Transport permission could not be checked.", error);
+    throw new Error("Transport permissions could not be verified.");
+  }
   if (!allowed) redirect("/dashboard?error=not-authorized");
   return { ...current, schoolId };
 }

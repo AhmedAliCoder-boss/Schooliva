@@ -4,7 +4,7 @@ const postgresUuid = z.string().regex(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{
 
 export const feeStructureSchema = z.object({
   academicSessionId: postgresUuid,
-  classId: postgresUuid,
+  classId: z.union([postgresUuid, z.literal("all")]),
   feeType: z.enum(["admission", "tuition", "examination", "transport", "library", "laboratory", "activity", "other"]),
   amount: z.coerce.number().min(0),
   frequency: z.enum(["one_time", "monthly", "term", "quarterly", "yearly"]),
@@ -19,6 +19,42 @@ export const invoiceSchema = z.object({
   dueDate: z.string().trim().min(1, "Due date required hai."),
   feeStructureIds: z.array(postgresUuid).min(1, "At least one fee item is required."),
   notes: z.string().trim().optional(),
+});
+
+export const studentInvoiceScheduleSchema = z.object({
+  studentId: postgresUuid,
+  academicSessionId: postgresUuid,
+  frequency: z.enum(["monthly", "quarterly", "yearly"]),
+  feeStructureIds: z.array(postgresUuid).min(1, "At least one recurring fee item is required."),
+});
+
+export const studentInvoiceScheduleStatusSchema = z.object({
+  scheduleId: postgresUuid,
+  isActive: z.enum(["true", "false"]).transform((value) => value === "true"),
+});
+
+const invoiceLineDescriptionsSchema = z.preprocess((value) => Array.isArray(value) ? value : [value], z.array(z.string().trim().min(2).max(200)).min(1).max(10));
+const invoiceLineQuantitiesSchema = z.preprocess((value) => Array.isArray(value) ? value : [value], z.array(z.coerce.number().positive()).min(1).max(10));
+const invoiceLinePricesSchema = z.preprocess((value) => Array.isArray(value) ? value : [value], z.array(z.coerce.number().min(0)).min(1).max(10));
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}, "Valid date required.");
+
+export const managementInvoiceSchema = z.object({
+  recipientName: z.string().trim().min(2).max(160),
+  recipientEmail: z.union([z.literal(""), z.string().trim().email()]).optional(),
+  recipientPhone: z.string().trim().max(40).optional(),
+  dueDate: isoDate,
+  itemDescription: invoiceLineDescriptionsSchema,
+  itemQuantity: invoiceLineQuantitiesSchema,
+  itemUnitPrice: invoiceLinePricesSchema,
+  notes: z.string().trim().max(1000).optional(),
+}).superRefine((invoice, context) => {
+  if (invoice.itemDescription.length !== invoice.itemQuantity.length
+    || invoice.itemDescription.length !== invoice.itemUnitPrice.length) {
+    context.addIssue({ code: "custom", path: ["itemDescription"], message: "Every invoice item must have a description, quantity, and unit price." });
+  }
 });
 
 export const feeStructureStatusSchema = z.object({

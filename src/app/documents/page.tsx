@@ -40,7 +40,7 @@ export default async function DocumentsPage() {
       <div>
         <p className="eyebrow">Documents</p>
         <h1>Documents &amp; certificates.</h1>
-        <p>Character and leaving certificates need School Admin / Principal approval before issue.</p>
+        <p>Character, leaving, transfer, and school completion certificates need School Admin / Principal approval before issue.</p>
         <Link className="text-action" href="/slc-tc">Open student certificate approvals -&gt;</Link>
       </div>
     </section>

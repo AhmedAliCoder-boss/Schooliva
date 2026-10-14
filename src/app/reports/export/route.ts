@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getActiveSchoolContext } from "@/lib/admin/school-context";
 import { buildSchoolReportCsv } from "@/lib/reports/export";
+import { parseReportFilters } from "@/lib/reports/filters";
 import { createClient } from "@/lib/supabase/server";
 
 function slugify(value: string) {
@@ -12,7 +13,7 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "") || "school-report";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -25,16 +26,24 @@ export async function GET() {
     return NextResponse.redirect(new URL(fallback, process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"));
   }
 
-  const { data: summary } = await supabase.rpc("report_summary", {
+  const filters = parseReportFilters(new URL(request.url).searchParams);
+  const { data: summary, error } = await supabase.rpc("report_summary", {
     target_school_id: schoolId,
-    from_date: null,
-    to_date: null,
-    class_filter: null,
-    section_filter: null,
-    session_filter: null,
+    from_date: filters.from,
+    to_date: filters.to,
+    class_filter: filters.classId || null,
+    section_filter: filters.sectionId || null,
+    session_filter: filters.sessionId || null,
   });
+  if (error) {
+    console.error("School report export failed.", error);
+    return NextResponse.json({ error: "The report could not be exported." }, { status: 500 });
+  }
 
-  const csv = buildSchoolReportCsv(summary ?? {}, schoolName ?? undefined);
+  const csv = buildSchoolReportCsv({
+    ...((summary ?? {}) as Record<string, unknown>),
+    report_filters: filters,
+  }, schoolName ?? undefined);
   const filename = `${slugify(schoolName ?? "school-report")}.csv`;
 
   return new NextResponse(csv, {

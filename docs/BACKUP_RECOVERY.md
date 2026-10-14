@@ -38,6 +38,8 @@ supabase db push
 - Never place service-role keys in frontend variables, mobile assets, logs, or issue reports.
 - Treat signed URLs, Auth recovery links, and test passwords as secrets.
 - Store exports in encrypted, access-controlled storage with a defined deletion date.
+- The Schooliva Settings download exports the school profile, all public database records from tables with a UUID school ID matching the selected school, and school-associated files from Schooliva-managed Storage buckets. It imposes no application-level file-size cap. Auth credentials, project configuration, and records or files not associated with that school are excluded; use Supabase's managed backup for full project recovery.
+- Schooliva's restore accepts a backup for the same school and merges rows by their original primary keys, updates matching rows, and does not remove rows created since the backup. Use Supabase's supported database restore workflow for full point-in-time recovery, schema recovery, or a clean replacement restore.
 
 ## Recovery acceptance checks
 

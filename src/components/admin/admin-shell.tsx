@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { signOut } from "@/app/actions/auth";
 import { NavIcon } from "@/components/schooliva-shell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { buildBrandingCssVars, type BrandingTheme } from "@/lib/school-branding";
 
 const groups = [
@@ -14,7 +15,7 @@ const groups = [
   { title: "PLATFORM", items: [{ label: "Schools", href: "/admin/schools", icon: "schools" }, { label: "Accounts", href: "/admin/accounts", icon: "users" }, { label: "Employee requests", href: "/admin/accounts/requests", icon: "users" }, { label: "Contracts", href: "/admin/contracts", icon: "contracts" }, { label: "Trials", href: "/admin/trials", icon: "calendar" }] },
   { title: "FINANCE", items: [{ label: "Billing", href: "/admin/billing", icon: "finance" }, { label: "Payments", href: "/admin/payments", icon: "payments" }, { label: "Outstanding / Dues", href: "/admin/billing/outstanding", icon: "alert" }] },
   { title: "USAGE", items: [{ label: "Storage", href: "/admin/storage", icon: "storage" }, { label: "Usage analytics", href: "/admin/usage", icon: "reports" }] },
-  { title: "MANAGEMENT", items: [{ label: "Activity / Audit", href: "/admin/activity", icon: "audit" }, { label: "Notifications", href: "/admin/notifications", icon: "notifications" }, { label: "Reports", href: "/admin/reports", icon: "reports" }] },
+  { title: "MANAGEMENT", items: [{ label: "Activity / Audit", href: "/admin/activity", icon: "audit" }, { label: "Notifications", href: "/notifications", icon: "notifications" }, { label: "Reports", href: "/admin/reports", icon: "reports" }] },
   { title: "SYSTEM", items: [{ label: "Admin settings", href: "/admin/settings", icon: "settings" }] },
   { title: "ACCOUNT", items: [{ label: "My profile", href: "/profile", icon: "profile" }] },
 ];
@@ -42,7 +43,7 @@ export function AdminShell({ children, title, description, breadcrumbs = [], sch
       <div className="admin-sidebar__footer"><Link href="/admin/schools" title={compact ? "Select a school" : undefined}><span aria-hidden="true">⌂</span><span>Select a school</span></Link><span className="admin-sidebar__access-label">Master Admin access</span><form action={signOut}><button type="submit" title={compact ? "Sign out" : undefined}><span aria-hidden="true">↪</span><span>Sign out</span></button></form></div>
     </aside>
     <div className="admin-main">
-      <header className="admin-header"><button className="admin-menu" aria-label="Open admin navigation" onClick={() => setOpen(true)}>☰</button><div className="admin-header__crumbs"><span>Schooliva Platform</span><b>/</b>{breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`}>{crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : crumb.label}{index < breadcrumbs.length - 1 && <b>/</b>}</span>)}</div><div className="admin-header__right"><span className="admin-live"><i /> Live platform</span><Link href="/profile" className="admin-avatar" aria-label="View profile">A</Link></div></header>
+      <header className="admin-header"><button className="admin-menu" aria-label="Open admin navigation" onClick={() => setOpen(true)}>☰</button><div className="admin-header__crumbs"><span>Schooliva Platform</span><b>/</b>{breadcrumbs.map((crumb, index) => <span key={`${crumb.label}-${index}`}>{crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : crumb.label}{index < breadcrumbs.length - 1 && <b>/</b>}</span>)}</div><div className="admin-header__right"><span className="admin-live"><i /> Live platform</span><NotificationBell /><Link href="/profile" className="admin-avatar" aria-label="View profile">A</Link></div></header>
       {schoolContext && <div className="admin-context"><span>Viewing School</span><strong>{schoolContext}</strong><Link href="/admin/schools">Change school</Link></div>}
       <main className="admin-content"><div className="admin-page-heading"><div><p className="admin-eyebrow">{schoolContext ? "School control" : "Master Admin"}</p><h1>{title}</h1>{description && <p>{description}</p>}</div></div>{children}</main>
     </div>

@@ -24,7 +24,7 @@ export const characterCertificateSchema = z.object({
 
 export const slcTcSchema = z.object({
   studentId: z.string().uuid("Select a student."),
-  certificateTitle: z.enum(["School Leaving Certificate", "Transfer Certificate"]),
+  certificateTitle: z.enum(["School Leaving Certificate", "Transfer Certificate", "School Completion Certificate"]),
   certificateNumber: z.string().regex(/^\d{4}$/, "Certificate number must be four digits."),
   issuedOn: certificateDateSchema,
   dateOfLeaving: certificateDateSchema,
@@ -42,7 +42,7 @@ export const slcTcSchema = z.object({
   promotionStatus: z.enum(["Promoted", "Not promoted", "Retained", "Completed"]),
   remarks: z.string().trim().max(1000),
 }).refine((certificate) => certificate.dateOfLeaving >= certificate.dateOfAdmission, {
-  message: "Leaving date cannot be earlier than admission date.",
+  message: "Certificate date cannot be earlier than admission date.",
   path: ["dateOfLeaving"],
 });
 

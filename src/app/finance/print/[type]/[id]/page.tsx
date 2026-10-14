@@ -9,12 +9,55 @@ import { getSchoolDocumentIdentity } from "@/lib/print/school-document";
 
 type Params = Promise<{ type: string; id: string }>;
 
+function todayInSchoolTimeZone() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export default async function FinancePrintPage({ params }: { params: Params }) {
   const { type, id } = await params;
-  if (type !== "invoice" && type !== "payment" && type !== "expense") notFound();
+  if (type !== "invoice" && type !== "management-invoice" && type !== "payment" && type !== "expense") notFound();
 
   const { supabase, schoolId } = await requireFinanceContext("view", type === "expense" ? "finance" : "fees");
   const school = await getSchoolDocumentIdentity(supabase, schoolId);
+
+  if (type === "management-invoice") {
+    const [{ data: invoice, error }, { data: items, error: itemsError }] = await Promise.all([
+      supabase.from("management_invoices").select("id,invoice_number,recipient_name,recipient_email,recipient_phone,status,subtotal,paid_amount,remaining_amount,due_date,notes").eq("id", id).eq("school_id", schoolId).maybeSingle(),
+      supabase.from("management_invoice_items").select("description,quantity,unit_price,amount").eq("invoice_id", id).eq("school_id", schoolId).order("created_at"),
+    ]);
+    if (error || itemsError) throw new Error("Management invoice document could not be loaded.");
+    if (!invoice) notFound();
+    const managementStatus = (invoice.status === "unpaid" || invoice.status === "partially_paid")
+      && String(invoice.due_date) < todayInSchoolTimeZone()
+      ? "overdue"
+      : String(invoice.status);
+    return <main className="school-document-page"><div className="school-document-toolbar no-print"><Link href="/finance/invoices">Back to invoices</Link><PrintAction label="Print invoice / Save PDF" /></div>
+      <SchoolDocument school={school} title="Management invoice" reference={String(invoice.invoice_number)} className="school-document--invoice">
+        <dl className="school-document__facts">
+          <div><dt>Bill to</dt><dd>{invoice.recipient_name}</dd></div>
+          <div><dt>Email</dt><dd>{invoice.recipient_email ?? "-"}</dd></div>
+          <div><dt>Phone</dt><dd>{invoice.recipient_phone ?? "-"}</dd></div>
+          <div><dt>Due date</dt><dd>{String(invoice.due_date)}</dd></div>
+          <div><dt>Status</dt><dd>{managementStatus.replaceAll("_", " ")}</dd></div>
+        </dl>
+        <table className="school-document__table"><thead><tr><th>Description</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>
+          {(items ?? []).map((item, index) => <tr key={`${item.description}-${index}`}><td>{item.description}</td><td>{Number(item.quantity).toLocaleString()}</td><td>{formatCurrency(item.unit_price)}</td><td>{formatCurrency(item.amount)}</td></tr>)}
+        </tbody></table>
+        <dl className="school-document__totals">
+          <div><dt>Total</dt><dd>{formatCurrency(invoice.subtotal)}</dd></div>
+          <div><dt>Paid</dt><dd>{formatCurrency(invoice.paid_amount)}</dd></div>
+          <div className="is-emphasis"><dt>Balance due</dt><dd>{formatCurrency(invoice.remaining_amount)}</dd></div>
+        </dl>
+        {invoice.notes && <p className="school-document__notes"><strong>Notes:</strong> {invoice.notes}</p>}
+        <div className="school-document__signatures"><span>Received by</span><span>Authorized signature</span></div>
+      </SchoolDocument>
+    </main>;
+  }
 
   if (type === "invoice") {
     const [{ data: invoice, error }, { data: items, error: itemsError }] = await Promise.all([

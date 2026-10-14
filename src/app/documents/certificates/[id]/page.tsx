@@ -22,7 +22,7 @@ type SlcTcContent = {
   dateOfAdmission?: string;
   dateOfLeaving?: string;
   dateOfBirth?: string;
-  certificateKind?: "character" | "slc_tc";
+  certificateKind?: "character" | "slc_tc" | "completion";
   lastClassAttended?: string;
   academicSession?: string;
   reasonForLeaving?: string;
@@ -62,7 +62,8 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
   const school = relation<School>(certificate.schools);
   const content = certificate.content && typeof certificate.content === "object" ? certificate.content as SlcTcContent : {};
   const studentName = content.studentName || [student?.first_name, student?.middle_name, student?.last_name].filter(Boolean).join(" ");
-  const isSlcTc = certificate.certificate_type === "leaving" && Boolean(content.certificateTitle);
+  const isSlcTc = ["leaving", "completion"].includes(certificate.certificate_type) && Boolean(content.certificateTitle);
+  const isCompletionCertificate = certificate.certificate_type === "completion";
   const isCharacterCertificate = certificate.certificate_type === "character" && content.certificateKind === "character";
   const isCustomStudentCertificate = isSlcTc || isCharacterCertificate;
 
@@ -107,14 +108,14 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
           <h2>{content.certificateTitle}</h2>
           <span>Certificate No. {String(certificate.certificate_number)}</span>
         </div>
-        <p className="slc-tc-certificate__intro">This is to certify that the following particulars are true and recorded in the school register.</p>
+        <p className="slc-tc-certificate__intro">{isCompletionCertificate ? "This is to certify that the student has successfully completed the stated academic requirements at this school." : "This is to certify that the following particulars are true and recorded in the school register."}</p>
         <dl className="slc-tc-certificate__facts">
           <div><dt>Student name</dt><dd>{studentName || "—"}</dd></div>
           <div><dt>Schooliva student ID</dt><dd>{content.studentIdentifier || student?.student_identifier || "—"}</dd></div>
           <div><dt>Admission number</dt><dd>{content.admissionNumber || student?.admission_number || "—"}</dd></div>
           <div><dt>Date of birth</dt><dd>{displayDate(content.dateOfBirth)}</dd></div>
           <div><dt>Date of admission</dt><dd>{displayDate(content.dateOfAdmission)}</dd></div>
-          <div><dt>Date of leaving</dt><dd>{displayDate(content.dateOfLeaving)}</dd></div>
+          <div><dt>{isCompletionCertificate ? "Completion date" : "Date of leaving"}</dt><dd>{displayDate(content.dateOfLeaving)}</dd></div>
           <div><dt>Last class attended</dt><dd>{content.lastClassAttended || "—"}</dd></div>
           <div><dt>Academic session</dt><dd>{content.academicSession || "—"}</dd></div>
           <div><dt>Last examination</dt><dd>{content.lastExam || "—"}</dd></div>
@@ -122,7 +123,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
           <div><dt>Conduct</dt><dd>{content.conduct || "—"}</dd></div>
           <div><dt>Fee status</dt><dd>{content.feeStatus ? content.feeStatus.replaceAll("_", " ").replace(/^./, (character) => character.toUpperCase()) : "—"}</dd></div>
         </dl>
-        <section className="slc-tc-certificate__statement"><h3>Reason for leaving / transfer</h3><p>{content.reasonForLeaving || content.text || "—"}</p></section>
+        <section className="slc-tc-certificate__statement"><h3>{isCompletionCertificate ? "Completion details" : "Reason for leaving / transfer"}</h3><p>{content.reasonForLeaving || content.text || "—"}</p></section>
         {content.remarks && <section className="slc-tc-certificate__statement"><h3>Additional remarks</h3><p>{content.remarks}</p></section>}
         <footer className="slc-tc-certificate__footer">
           <span>Issued on {displayDate(certificate.issued_on)}</span>

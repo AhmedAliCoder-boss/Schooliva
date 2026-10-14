@@ -1,11 +1,62 @@
-import Link from "next/link";
 import { requireNotificationContext } from "@/lib/notifications/context";
-import { MarkAllNotificationsReadButton, NotificationReadButton } from "@/components/notifications/notification-actions";
+import { NotificationCenter, type NotificationCenterRow } from "@/components/notifications/notification-center";
+
+type RecipientRole = { slug: string; name: string; recipient_count: number };
 
 export default async function NotificationsPage() {
-  const { supabase } = await requireNotificationContext();
-  const { data: notifications } = await supabase.from("notifications").select("id,event_type,title,message,entity_type,entity_id,read_at,created_at").order("created_at", { ascending: false }).limit(100);
-  const rows = notifications ?? [];
-  const unread = rows.filter((notification) => !notification.read_at).length;
-  return <main className="students-shell"><header className="students-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></header><section className="students-heading"><div><p className="eyebrow">In-app notifications</p><h1>Notification center.</h1><p>{unread} unread notification{unread === 1 ? "" : "s"} for your account.</p></div><MarkAllNotificationsReadButton /></section><div className="notification-list">{rows.length ? rows.map((notification) => <article className={notification.read_at ? "notification-card" : "notification-card unread"} key={notification.id}><div><span className="notification-event">{notification.event_type.replaceAll("_", " ")}</span><h2>{notification.title}</h2><p>{notification.message}</p><small>{new Date(notification.created_at).toLocaleString()}</small>{notification.event_type === "student_promotion_review" && notification.entity_id && <Link className="text-action" href={`/students/promotions?session=${notification.entity_id}`}>Review student promotions -&gt;</Link>}</div><NotificationReadButton id={notification.id} unread={!notification.read_at} /></article>) : <div className="student-empty"><h3>No notifications</h3><p>Important school updates will appear here.</p></div>}</div></main>;
+  const { supabase, schoolId, user } = await requireNotificationContext();
+  const [
+    { data: notifications, error: notificationError },
+    { data: canManage, error: permissionError },
+    { data: settings, error: settingsError },
+  ] = await Promise.all([
+    supabase.from("notifications")
+      .select("id,event_type,title,message,entity_type,entity_id,read_at,created_at")
+      .eq("school_id", schoolId)
+      .eq("recipient_profile_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase.rpc("has_permission", {
+      target_school_id: schoolId,
+      target_resource: "notifications",
+      target_action: "manage",
+    }),
+    supabase.from("school_settings")
+      .select("timezone")
+      .eq("school_id", schoolId)
+      .maybeSingle(),
+  ]);
+  if (notificationError || permissionError || settingsError) {
+    console.error("Notification center data could not be loaded.", { notificationError, permissionError, settingsError });
+    throw new Error("Notification center data could not be loaded.");
+  }
+
+  let recipientRoles: RecipientRole[] = [];
+  if (canManage) {
+    const { data: roles, error: rolesError } = await supabase.rpc("get_notification_recipient_roles", { target_school_id: schoolId });
+    if (rolesError) {
+      console.error("Notification recipient roles could not be loaded.", rolesError);
+      throw new Error("Notification recipient roles could not be loaded.");
+    }
+    const roleRows = (roles ?? []) as Array<{ slug: string | null; name: string | null; recipient_count: number | null }>;
+    recipientRoles = roleRows.flatMap((role) => {
+      if (!role.slug || !role.name) return [];
+      return [{ slug: role.slug, name: role.name, recipient_count: Number(role.recipient_count ?? 0) }];
+    });
+  }
+
+  const rows = (notifications ?? []) as NotificationCenterRow[];
+  const unreadCount = rows.filter((notification) => !notification.read_at).length;
+  return <main className="notification-page">
+    <header className="notification-page__hero">
+      <div><span>COMMUNICATION CENTER</span><h1>Notifications</h1><p>Role-aware school updates, personal alerts, and a searchable history—all in one inbox.</p></div>
+      <div className="notification-page__summary"><strong>{unreadCount}</strong><span>unread updates</span></div>
+    </header>
+    <NotificationCenter
+      notifications={rows}
+      canManage={Boolean(canManage)}
+      recipientRoles={recipientRoles}
+      timeZone={settings?.timezone ?? "UTC"}
+    />
+  </main>;
 }

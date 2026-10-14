@@ -24,6 +24,7 @@ describe("SLC/TC certificate validation", () => {
   it("accepts complete SLC/TC details with a valid date range", () => {
     expect(slcTcSchema.safeParse(certificate).success).toBe(true);
     expect(slcTcSchema.safeParse({ ...certificate, certificateTitle: "Transfer Certificate" }).success).toBe(true);
+    expect(slcTcSchema.safeParse({ ...certificate, certificateTitle: "School Completion Certificate" }).success).toBe(true);
     expect(slcTcSchema.safeParse({ ...certificate, academicSessionId: "" }).success).toBe(true);
     expect(slcTcSchema.safeParse({ ...certificate, academicSessionId: "stale-browser-session-value" }).success).toBe(true);
   });

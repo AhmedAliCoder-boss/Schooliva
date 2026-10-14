@@ -4,13 +4,17 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { formatCurrency } from "@/lib/format/currency";
+import { summarizeInvoiceStatuses, type InvoiceStatistics } from "@/lib/finance/invoice-statistics";
 
 export type InvoiceRegisterRow = {
   id: string;
+  studentId: string;
   invoiceNumber: string;
   studentName: string;
   admissionNumber: string;
   studentIdentifier: string;
+  className: string;
+  sectionName: string;
   sessionId: string;
   sessionName: string;
   dueDate: string;
@@ -41,7 +45,7 @@ function InvoiceTable({ invoices, today }: { invoices: InvoiceRegisterRow[]; tod
   return <div className="student-table-wrap">
     <table className="student-table invoice-register__table">
       <thead><tr><th>Invoice</th><th>Student</th><th>Session</th><th>Due date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th className="no-print">Document</th></tr></thead>
-      <tbody>{invoices.length ? invoices.map((invoice) => {
+      <tbody>{invoices.map((invoice) => {
         const overdue = isOverdue(invoice, today);
         return <tr key={invoice.id}>
           <td><strong>{invoice.invoiceNumber}</strong></td>
@@ -54,8 +58,64 @@ function InvoiceTable({ invoices, today }: { invoices: InvoiceRegisterRow[]; tod
           <td><span className={`status-pill ${invoice.status}`}>{invoice.status.replaceAll("_", " ")}</span></td>
           <td className="no-print"><Link className="school-document-link" href={`/finance/print/invoice/${invoice.id}`}>Print / PDF</Link></td>
         </tr>;
-      }) : <tr><td colSpan={9}><div className="student-empty"><h3>No matching invoices</h3><p>Try a different search or clear some filters.</p></div></td></tr>}</tbody>
+      })}</tbody>
     </table>
+  </div>;
+}
+
+function StatusStatistics({ statistics }: { statistics: InvoiceStatistics }) {
+  return <span className="results-group-statistics invoice-register__statistics" aria-label="Invoice status statistics">
+    <span className="results-group-stat invoice-register__stat--paid">Paid {statistics.paid.count} · {formatCurrency(statistics.paid.amount)} collected</span>
+    <span className="results-group-stat invoice-register__stat--pending">Pending {statistics.pending.count} · {formatCurrency(statistics.pending.amount)} due</span>
+    <span className="results-group-stat invoice-register__stat--partial">Partially paid {statistics.partiallyPaid.count} · {formatCurrency(statistics.partiallyPaid.amount)} due</span>
+  </span>;
+}
+
+function GroupedInvoiceRegister({ invoices, today }: { invoices: InvoiceRegisterRow[]; today: string }) {
+  const classes = new Map<string, Map<string, Map<string, InvoiceRegisterRow[]>>>();
+  for (const invoice of invoices) {
+    const className = invoice.className || "Unassigned class";
+    const sectionName = invoice.sectionName || "Unassigned section";
+    const classSections = classes.get(className) ?? new Map<string, Map<string, InvoiceRegisterRow[]>>();
+    const sectionStudents = classSections.get(sectionName) ?? new Map<string, InvoiceRegisterRow[]>();
+    const studentKey = invoice.studentId;
+    const studentInvoices = sectionStudents.get(studentKey) ?? [];
+    studentInvoices.push(invoice);
+    sectionStudents.set(studentKey, studentInvoices);
+    classSections.set(sectionName, sectionStudents);
+    classes.set(className, classSections);
+  }
+  return <div className="invoice-register__groups">
+    {classes.size ? [...classes.entries()].map(([className, sections]) => {
+      const classInvoices = [...sections.values()].flatMap((students) => [...students.values()].flat());
+      const classStatistics = summarizeInvoiceStatuses(classInvoices);
+      return <details className="results-class-group invoice-register__class" key={className}>
+      <summary>
+        <span className="results-group-summary">
+          <span><strong>{className}</strong><small>{classInvoices.length} invoices · {sections.size} sections</small></span>
+          <StatusStatistics statistics={classStatistics} />
+        </span>
+        <span className="exam-content-drawer__toggle" aria-hidden="true">⌄</span>
+      </summary>
+      <div className="results-section-groups">{[...sections.entries()].map(([sectionName, students]) => {
+        const sectionInvoices = [...students.values()].flat();
+        const sectionStatistics = summarizeInvoiceStatuses(sectionInvoices);
+        return <details className="results-section-group invoice-register__section" key={sectionName}>
+        <summary>
+          <span className="results-group-summary">
+            <span><strong>{sectionName}</strong><small>{students.size} students · {sectionInvoices.length} invoices</small></span>
+            <StatusStatistics statistics={sectionStatistics} />
+          </span>
+          <span className="exam-content-drawer__toggle" aria-hidden="true">⌄</span>
+        </summary>
+        {[...students.values()].map((rows) => <details className="invoice-register__student" key={rows[0].studentId}>
+          <summary><strong>{rows[0].studentName}</strong><span>{rows[0].studentIdentifier || rows[0].admissionNumber || "Student ID unavailable"}</span><span>{rows.length} invoices</span></summary>
+          <InvoiceTable invoices={rows} today={today} />
+        </details>)}
+      </details>;
+      })}</div>
+    </details>;
+    }) : <div className="student-empty"><h3>No matching invoices</h3><p>Try a different search or clear some filters.</p></div>}
   </div>;
 }
 
@@ -152,6 +212,6 @@ export function InvoiceRegister({ invoices, sessions, today }: {
       }}><option value="newest">Recently created</option><option value="oldest">Oldest first</option><option value="balance_high">Highest balance</option><option value="balance_low">Lowest balance</option></select></label>
       <label className="invoice-register__toggle"><input type="checkbox" checked={openBalanceOnly} onChange={(event) => setOpenBalanceOnly(event.target.checked)} /><span>Show open balances only</span></label>
     </div>
-    <InvoiceTable invoices={filteredInvoices} today={today} />
+    <GroupedInvoiceRegister invoices={filteredInvoices} today={today} />
   </section>;
 }

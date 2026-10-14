@@ -33,18 +33,32 @@ export const bootstrapSchoolSchema = z.object({
 
 export const schoolProfileSchema = z.object({
   name: requiredText("School name"),
+  shortName: optionalText,
   slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug lowercase letters, numbers aur hyphens mein hona chahiye."),
   code: requiredText("School code").max(20),
+  schoolType: optionalText,
+  campus: optionalText,
+  board: optionalText,
+  medium: optionalText,
+  principal: optionalText,
+  establishedYear: z.preprocess(
+    (value) => value === "" ? undefined : value,
+    z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
+  ),
   email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
   phone: optionalText,
-  website: optionalText,
+  website: z.string().trim().url("Valid website URL enter karein.").optional().or(z.literal("")),
   address: optionalText,
+  city: optionalText,
+  state: optionalText,
+  country: optionalText,
 });
 
 export const settingsSchema = z.object({
   timezone: timezoneField,
   currency: currencyField,
   dateFormat: requiredText("Date format"),
+  academicYear: optionalText,
 });
 
 export const sessionSchema = z.object({

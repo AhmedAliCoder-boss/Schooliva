@@ -186,7 +186,11 @@ export async function issueSlcTc(_: DocumentFormState | undefined, formData: For
     return { success: `Character certificate ${certificateNumber} sent for principal / school admin approval.` };
   }
 
-  const parsed = slcTcSchema.safeParse(values(formData));
+  const kind = formData.get("certificateKind");
+  const parsed = slcTcSchema.safeParse({
+    ...values(formData),
+    ...(kind === "completion" ? { certificateTitle: "School Completion Certificate" } : {}),
+  });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "SLC/TC details are invalid." };
   const { supabase, schoolId, user } = await requireDocumentContext("manage");
   const { data: canManageCertificates, error: permissionError } = await supabase.rpc("has_permission", {
@@ -293,7 +297,7 @@ export async function issueSlcTc(_: DocumentFormState | undefined, formData: For
     return { error: "A four-digit certificate number could not be generated." };
   }
     const content = {
-      certificateKind: "slc_tc",
+      certificateKind: parsed.data.certificateTitle === "School Completion Certificate" ? "completion" : "slc_tc",
       ...parsed.data,
       certificateNumber,
       academicSessionId: sessionRecord.id,
@@ -309,7 +313,7 @@ export async function issueSlcTc(_: DocumentFormState | undefined, formData: For
     const { error } = await supabase.from("certificate_records").insert({
       school_id: schoolId,
       student_id: student.id,
-      certificate_type: "leaving",
+      certificate_type: parsed.data.certificateTitle === "School Completion Certificate" ? "completion" : "leaving",
       certificate_number: certificateNumber,
       issued_on: parsed.data.issuedOn,
       content,
@@ -337,7 +341,7 @@ export async function reviewStudentCertificate(
     .eq("id", parsed.data.certificateId)
     .eq("school_id", schoolId)
     .eq("status", "pending_approval")
-    .in("certificate_type", ["character", "leaving"])
+    .in("certificate_type", ["character", "leaving", "completion"])
     .maybeSingle();
   if (certificateError) {
     console.error("Certificate awaiting review could not be loaded.", certificateError);

@@ -3,13 +3,16 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { BootstrapSchoolForm, AssignmentForm, ClassForm, DeleteRecordForm, SchoolProfileForm, SectionForm, SessionForm, SettingsForm, SubjectForm, TermForm } from "@/components/setup/setup-forms";
+import { SettingsOverview } from "@/components/setup/settings-overview";
+import { SchoolBackupPanel } from "@/components/setup/school-backup-panel";
 import { requireUser } from "@/lib/auth/authorization";
 import { requireSetupContext } from "@/lib/setup/context";
 import { getActiveSchoolContext } from "@/lib/admin/school-context";
+import { isSchoolAdminUser } from "@/lib/auth/roles";
 
 type SearchParams = Promise<{ section?: string; search?: string; page?: string; edit?: string; onboarding?: string }>;
 const sections = [
-  ["school", "School profile"], ["sessions", "Academic sessions"], ["terms", "Terms"], ["classes", "Classes"], ["sections", "Sections"], ["subjects", "Subjects"], ["assignments", "Class subjects"],
+  ["overview", "Settings overview"], ["school", "School profile"], ["backup", "Data backup"], ["sessions", "Academic sessions"], ["terms", "Terms"], ["classes", "Classes"], ["sections", "Sections"], ["subjects", "Subjects"], ["assignments", "Class subjects"],
 ] as const;
 type SetupRow = { id: string; name?: string; code?: string; starts_on?: string; ends_on?: string; status?: string; academic_sessions?: unknown; description?: string | null; capacity?: number | null; classes?: unknown; teachers?: unknown; subject_type?: string; subjects?: unknown; [key: string]: unknown };
 
@@ -34,12 +37,20 @@ export default async function SetupPage({ searchParams }: { searchParams: Search
     return <main className="setup-onboarding"><div className="setup-onboarding-inner"><Link href="/" aria-label="Schooliva home"><Image className="setup-logo" src="/brand/landscape_logo.png" alt="Schooliva" width={240} height={80} priority /></Link><p className="eyebrow">School setup</p><h1>Set up your school.</h1><p className="setup-lede">Create the school workspace that will hold your academic structure and future operations.</p><BootstrapSchoolForm /></div></main>;
   }
 
-  const { supabase, schoolId } = await requireSetupContext();
-  const section = sections.some(([key]) => key === params.section) ? params.section! : "school";
+  const requestedSection = params.section;
+  const canManageBackup = activeSchool.isMasterAdmin
+    || await isSchoolAdminUser(current.supabase, current.user.id, activeSchool.schoolId);
+  if (requestedSection === "backup" && !canManageBackup) redirect("/setup?section=overview");
+
+  const setupContext = requestedSection === "backup" && activeSchool.isMasterAdmin
+    ? { supabase: current.supabase, schoolId: activeSchool.schoolId }
+    : await requireSetupContext();
+  const { supabase, schoolId } = setupContext;
+  const section = sections.some(([key]) => key === params.section) ? params.section! : "overview";
   const search = asSearch(params.search); const page = asPage(params.page); const pageSize = 8; const from = (page - 1) * pageSize; const to = from + pageSize;
   const [{ data: schoolData }, { data: settingsData }, { data: sessionsData }, { data: termsData }, { data: classesData }, { data: sectionsData }, { data: subjectsData }, { data: assignmentsData }, { data: teachersData }] = await Promise.all([
     supabase.from("schools").select("id,name,short_name,slug,code,school_type,campus,board,medium,email,phone,website,address,city,state,country,principal,established_year").eq("id", schoolId).maybeSingle(),
-    supabase.from("school_settings").select("timezone,currency_code,date_format").eq("school_id", schoolId).maybeSingle(),
+    supabase.from("school_settings").select("timezone,currency_code,date_format,academic_year").eq("school_id", schoolId).maybeSingle(),
     supabase.from("academic_sessions").select("id,name,code,starts_on,ends_on,status").eq("school_id", schoolId).order("starts_on", { ascending: false }).ilike(search ? "name" : "code", search ? `%${search}%` : "%").range(from, to),
     supabase.from("academic_terms").select("id,name,code,starts_on,ends_on,status,academic_session_id,academic_sessions(name)").eq("school_id", schoolId).order("starts_on", { ascending: false }).ilike(search ? "name" : "code", search ? `%${search}%` : "%").range(from, to),
     supabase.from("classes").select("id,name,code,description,status").eq("school_id", schoolId).order("name").ilike(search ? "name" : "code", search ? `%${search}%` : "%").range(from, to),
@@ -49,12 +60,25 @@ export default async function SetupPage({ searchParams }: { searchParams: Search
     supabase.from("teachers").select("id,first_name,last_name").eq("school_id", schoolId).eq("is_active", true).order("last_name"),
   ]);
   const sessions = (sessionsData ?? []) as unknown as SetupRow[]; const terms = (termsData ?? []) as unknown as SetupRow[]; const classes = (classesData ?? []) as unknown as SetupRow[]; const setupSections = (sectionsData ?? []) as unknown as SetupRow[]; const subjects = (subjectsData ?? []) as unknown as SetupRow[]; const assignments = (assignmentsData ?? []) as unknown as SetupRow[]; const teachers = (teachersData ?? []) as unknown as SetupRow[]; const school = (schoolData ?? {}) as Record<string, string | null>; const settings = (settingsData ?? {}) as Record<string, string | null>;
+  const overviewCounts = section === "overview" ? await Promise.all([
+    supabase.from("academic_sessions").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+    supabase.from("academic_terms").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+    supabase.from("classes").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+    supabase.from("sections").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+    supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId).eq("status", "active"),
+  ]) : undefined;
+  if (overviewCounts?.some((result) => result.error)) {
+    const errors = overviewCounts.filter((result) => result.error).map((result) => result.error?.message);
+    throw new Error(`School settings overview counts could not be loaded: ${errors.join("; ")}`);
+  }
   const editRecord = params.edit ? ([...sessions, ...terms, ...classes, ...setupSections, ...subjects].find((item) => item.id === params.edit) as unknown as Record<string, string> | undefined) : undefined;
 
   return <main className="setup-shell"><header className="setup-header"><Link className="wordmark" href="/"><span className="wordmark-mark">S</span><span>schooliva</span></Link><div className="setup-header-actions"><span className="setup-header-label">School setup</span><Link className="text-action" href="/dashboard">Dashboard -&gt;</Link></div></header>
-    <div className="setup-layout"><aside className="setup-sidebar"><p className="eyebrow">Configuration</p><h1>Build your school.</h1><nav aria-label="School setup sections">{sections.map(([key, label]) => <Link className={section === key ? "setup-nav-link active" : "setup-nav-link"} href={setupHref(key)} key={key}><span>{String(sections.findIndex(([item]) => item === key) + 1).padStart(2, "0")}</span>{label}</Link>)}</nav></aside>
-      <section className="setup-content"><div className="setup-content-heading"><div><p className="eyebrow">{sections.find(([key]) => key === section)?.[1]}</p><h2>{section === "school" ? school.name ?? "School profile" : sections.find(([key]) => key === section)?.[1]}</h2></div>{section !== "school" && <form className="setup-search"><input name="search" defaultValue={search} placeholder="Search setup records..." /><input type="hidden" name="section" value={section} /><button type="submit">Search</button></form>}</div>
+    <div className="setup-layout"><aside className="setup-sidebar"><p className="eyebrow">Configuration</p><h1>Build your school.</h1><nav aria-label="School setup sections">{sections.filter(([key]) => key !== "backup" || canManageBackup).map(([key, label]) => <Link className={section === key ? "setup-nav-link active" : "setup-nav-link"} href={setupHref(key)} key={key}><span>{String(sections.findIndex(([item]) => item === key) + 1).padStart(2, "0")}</span>{label}</Link>)}</nav></aside>
+      <section className="setup-content"><div className="setup-content-heading"><div><p className="eyebrow">{sections.find(([key]) => key === section)?.[1]}</p><h2>{section === "school" ? school.name ?? "School profile" : sections.find(([key]) => key === section)?.[1]}</h2></div>{section !== "school" && section !== "overview" && <form className="setup-search"><input name="search" defaultValue={search} placeholder="Search setup records..." /><input type="hidden" name="section" value={section} /><button type="submit">Search</button></form>}</div>
+        {section === "overview" && overviewCounts && <SettingsOverview school={school} activeSessions={overviewCounts[0].count ?? 0} activeTerms={overviewCounts[1].count ?? 0} activeClasses={overviewCounts[2].count ?? 0} activeSections={overviewCounts[3].count ?? 0} activeSubjects={overviewCounts[4].count ?? 0} />}
         {section === "school" && <><div className="setup-card"><SchoolProfileForm school={school} /></div><div className="setup-card"><h3>Academic configuration</h3><SettingsForm settings={settings} /></div></>}
+        {section === "backup" && canManageBackup && <SchoolBackupPanel canRestore={canManageBackup} />}
         {section === "sessions" && <><div className="setup-card"><h3>{editRecord ? "Edit academic session" : "Add academic session"}</h3><SessionForm initial={editRecord} /></div><div className="setup-table-wrap"><table className="setup-table"><thead><tr><th>Name</th><th>Dates</th><th>Status</th><th /></tr></thead><tbody>{sessions.length ? sessions.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.starts_on} - {item.ends_on}</td><td><span className={`status-pill ${item.status}`}>{item.status}</span></td><td><Link className="table-edit" href={`${setupHref(section, search, page)}&edit=${item.id}`}>Edit</Link><DeleteRecordForm table="academic_sessions" id={item.id} /></td></tr>) : <tr><td colSpan={4}><EmptyState label="sessions" /></td></tr>}</tbody></table><Pagination section={section} search={search} page={page} hasNext={sessions.length > pageSize} /></div></>}
         {section === "terms" && <><div className="setup-card"><h3>{editRecord ? "Edit academic term" : "Add academic term"}</h3><TermForm sessions={sessions as Array<{ id: string; name: string }>} initial={editRecord} /></div><div className="setup-table-wrap"><table className="setup-table"><thead><tr><th>Name</th><th>Session</th><th>Dates</th><th>Status</th><th /></tr></thead><tbody>{terms.length ? terms.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{relation<{ name: string }>(item.academic_sessions)?.name ?? "-"}</td><td>{item.starts_on} - {item.ends_on}</td><td><span className={`status-pill ${item.status}`}>{item.status}</span></td><td><Link className="table-edit" href={`${setupHref(section, search, page)}&edit=${item.id}`}>Edit</Link><DeleteRecordForm table="academic_terms" id={item.id} /></td></tr>) : <tr><td colSpan={5}><EmptyState label="terms" /></td></tr>}</tbody></table><Pagination section={section} search={search} page={page} hasNext={terms.length > pageSize} /></div></>}
         {section === "classes" && <><div className="setup-card"><h3>{editRecord ? "Edit class" : "Add class"}</h3><ClassForm initial={editRecord} /></div><div className="setup-table-wrap"><table className="setup-table"><thead><tr><th>Class</th><th>Description</th><th>Status</th><th /></tr></thead><tbody>{classes.length ? classes.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.description || "-"}</td><td><span className={`status-pill ${item.status}`}>{item.status}</span></td><td><Link className="table-edit" href={`${setupHref(section, search, page)}&edit=${item.id}`}>Edit</Link><DeleteRecordForm table="classes" id={item.id} /></td></tr>) : <tr><td colSpan={4}><EmptyState label="classes" /></td></tr>}</tbody></table><Pagination section={section} search={search} page={page} hasNext={classes.length > pageSize} /></div></>}

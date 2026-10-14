@@ -9,6 +9,7 @@ import { GlobalSearchBar } from "@/components/search/global-search";
 import { LiveClock } from "@/components/dashboard/live-clock";
 import { signOut } from "@/app/actions/auth";
 import { NavIcon, navGroups } from "@/components/schooliva-shell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getActiveHref } from "@/lib/navigation/active-path";
 
 const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/reset-password", "/admin"];
@@ -129,7 +130,7 @@ export function AppChrome({
           <div className="workspace-header__tools">
             <LiveClock />
             <GlobalSearchBar compact />
-            <Link href="/notifications" className="workspace-header__icon" aria-label="Open notifications"><NavIcon name="notifications" /></Link>
+            <NotificationBell />
             <Link href="/profile" className="workspace-header__profile" aria-label={`Open profile for ${userName}`}>
               <span className="workspace-header__avatar">
                 {userAvatarUrl

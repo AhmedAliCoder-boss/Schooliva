@@ -176,14 +176,14 @@ export default async function SlcTcPage() {
     supabase.from("certificate_records")
     .select("id,certificate_number,certificate_type,issued_on,content,students(first_name,middle_name,last_name,student_identifier)")
     .eq("school_id", schoolId)
-    .in("certificate_type", ["leaving", "character"])
+    .in("certificate_type", ["leaving", "completion", "character"])
     .eq("status", "issued")
     .order("issued_on", { ascending: false })
     .limit(500),
     supabase.from("certificate_records")
       .select("id,certificate_number,certificate_type,issued_on,content,students(first_name,middle_name,last_name,student_identifier)")
       .eq("school_id", schoolId)
-      .in("certificate_type", ["leaving", "character"])
+      .in("certificate_type", ["leaving", "completion", "character"])
       .eq("status", "pending_approval")
       .order("issued_on", { ascending: true })
       .limit(500),
@@ -204,7 +204,7 @@ export default async function SlcTcPage() {
     return {
       id: record.id,
       certificateNumber: record.certificate_number,
-      certificateTitle: content.certificateTitle ?? "Leaving certificate",
+      certificateTitle: content.certificateTitle ?? (record.certificate_type === "completion" ? "School Completion Certificate" : "Leaving certificate"),
       issuedOn: record.issued_on,
       studentName: content.studentName ?? [student?.first_name, student?.middle_name, student?.last_name].filter(Boolean).join(" "),
       studentId: content.studentIdentifier ?? student?.student_identifier ?? "",
@@ -218,8 +218,8 @@ export default async function SlcTcPage() {
     return {
       id: record.id,
       certificateNumber: record.certificate_number,
-      certificateTitle: content.certificateTitle ?? (record.certificate_type === "character" ? "Character Certificate" : "Leaving certificate"),
-      certificateType: record.certificate_type === "character" ? "character" : "leaving",
+      certificateTitle: content.certificateTitle ?? (record.certificate_type === "character" ? "Character Certificate" : record.certificate_type === "completion" ? "School Completion Certificate" : "Leaving certificate"),
+      certificateType: record.certificate_type === "character" ? "character" : record.certificate_type === "completion" ? "completion" : "leaving",
       issuedOn: record.issued_on,
       studentName: content.studentName ?? [student?.first_name, student?.middle_name, student?.last_name].filter(Boolean).join(" "),
       studentId: content.studentIdentifier ?? student?.student_identifier ?? "",
@@ -236,7 +236,7 @@ export default async function SlcTcPage() {
       <div className="module-page-header__row"><div>
         <p className="module-page-header__eyebrow">Academics / Student certificates</p>
         <h1>Student certificates.</h1>
-        <p>Issue character certificates, school leaving certificates, or transfer certificates from the student record.</p>
+        <p>Issue character, school leaving, transfer, or school completion certificates from the student record.</p>
       </div></div>
     </section>
     <SlcTcWorkflow students={studentOptions} history={history} pendingApprovals={pendingApprovals} canApproveCertificates={canApproveCertificates} today={currentDate()} classSections={classSectionOptions} sessions={sessionOptions} nextCertificateNumber={nextCertificateNumber} />

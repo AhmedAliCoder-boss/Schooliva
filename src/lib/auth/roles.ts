@@ -10,6 +10,7 @@ export const SCHOOL_STAFF_ROLE_SLUGS = [
   "hr_manager",
   "librarian",
   "transport_manager",
+  "cafeteria_manager",
   "staff",
 ] as const;
 export const SCHOOL_MANAGED_ACCOUNT_ROLE_SLUGS = [
@@ -18,6 +19,7 @@ export const SCHOOL_MANAGED_ACCOUNT_ROLE_SLUGS = [
   "hr_manager",
   "librarian",
   "transport_manager",
+  "cafeteria_manager",
   "staff",
 ] as const;
 
@@ -48,4 +50,23 @@ export async function isMasterAdminUser(supabase: Awaited<ReturnType<typeof crea
 
   const { data, error } = await supabase.rpc("is_super_admin");
   return !error && data === true;
+}
+
+export async function isSchoolAdminUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  schoolId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("roles!inner(slug)")
+    .eq("user_id", userId)
+    .eq("school_id", schoolId);
+
+  if (error) throw new Error("School administrator access could not be verified.");
+
+  return (data ?? []).some((assignment) => {
+    const role = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles;
+    return role && typeof role === "object" && "slug" in role && isSchoolAdminRole(String(role.slug));
+  });
 }
