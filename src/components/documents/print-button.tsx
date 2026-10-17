@@ -1,5 +1,5 @@
 "use client";
 
-export function PrintButton() {
-  return <button className="auth-submit" type="button" onClick={() => window.print()}>Print certificate</button>;
+export function PrintButton({ label = "Print certificate" }: { label?: string }) {
+  return <button className="auth-submit" type="button" onClick={() => window.print()}>{label}</button>;
 }

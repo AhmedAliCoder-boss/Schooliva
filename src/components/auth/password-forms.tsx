@@ -1,9 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
 import { useState, type FormEvent } from "react";
-
-import { resetPassword } from "@/app/actions/auth";
 
 import { SubmitButton } from "./submit-button";
 
@@ -35,17 +32,5 @@ export function AdminContactForm({ adminEmail }: { adminEmail: string | null }) 
     {!adminEmail && <p className="auth-error">Admin contact is not configured. Please ask your school administrator for help.</p>}
     {notice && <p className="auth-success" role="status">{notice}</p>}
     <SubmitButton disabled={!adminEmail}>Contact administrator</SubmitButton>
-  </form>;
-}
-
-export function ResetPasswordForm() {
-  const [state, action] = useActionState(resetPassword, undefined);
-  return <form action={action} className="auth-form">
-    {state?.error && <p className="auth-error">{state.error}</p>}
-    <label htmlFor="password">New password<input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required /></label>
-    {state?.fieldErrors?.password && <p className="field-error">{state.fieldErrors.password[0]}</p>}
-    <label htmlFor="confirmPassword">Confirm password<input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
-    {state?.fieldErrors?.confirmPassword && <p className="field-error">{state.fieldErrors.confirmPassword[0]}</p>}
-    <SubmitButton>Update password</SubmitButton>
   </form>;
 }

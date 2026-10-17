@@ -15,15 +15,15 @@ export function reconcileInvoiceStatus({
     return { status: "paid", remainingAmount: 0 };
   }
 
-  if (safePaidAmount > 0) {
-    return { status: "partially_paid", remainingAmount };
-  }
-
   if (dueDate) {
     const due = new Date(`${dueDate}T00:00:00Z`);
     if (!Number.isNaN(due.getTime()) && due < new Date()) {
       return { status: "overdue", remainingAmount };
     }
+  }
+
+  if (safePaidAmount > 0) {
+    return { status: "partially_paid", remainingAmount };
   }
 
   return { status: "unpaid", remainingAmount };

@@ -13,7 +13,7 @@ export function resolveSchoolLifecycle({
 }) {
   const normalizedContractStatus = String(contractStatus ?? "").toLowerCase();
   const normalizedTrialStatus = String(trialStatus ?? "").toLowerCase();
-  const activeContract = ["active", "paused"].includes(normalizedContractStatus);
+  const activeContract = normalizedContractStatus === "active";
   const activeTrial = ["active", "pending"].includes(normalizedTrialStatus);
 
   if (activeContract) {

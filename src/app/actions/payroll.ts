@@ -25,7 +25,7 @@ function revalidatePayroll() {
 
 export async function savePayrollPolicy(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
   const parsed = payrollPolicySchema.safeParse(fields(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payroll policy invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payroll policy is invalid." };
   const { supabase, schoolId, user } = await requirePayrollContext("configure-policy");
   const { error } = await supabase.from("payroll_policies").upsert({
     school_id: schoolId,
@@ -36,25 +36,25 @@ export async function savePayrollPolicy(_: PayrollFormState | undefined, formDat
     late_marks_per_day_deduction: parsed.data.lateMarksPerDayDeduction,
     updated_by: user.id,
   }, { onConflict: "school_id" });
-  if (error) return { error: "Payroll policy save nahi ho saki." };
+  if (error) return { error: "Payroll policy could not be saved." };
   revalidatePayroll();
-  return { success: "Payroll policy save ho gayi." };
+  return { success: "Payroll policy saved." };
 }
 
 export async function savePayrollCompensation(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
   const parsed = payrollCompensationSchema.safeParse(fields(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Salary details invalid hain." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Salary details are invalid." };
   const { supabase, schoolId, user } = await requirePayrollContext("manage");
   const table = parsed.data.employeeType === "teacher" ? "teachers" : "staff";
   const { data: employee, error: employeeError } = await supabase.from(table)
     .select("id").eq("id", parsed.data.employeeId).eq("school_id", schoolId).eq("employment_status", "active").eq("is_active", true).is("deleted_at", null).maybeSingle();
-  if (employeeError) return { error: "Employee record verify nahi ho saka." };
+  if (employeeError) return { error: "Employee record could not be verified." };
   if (!employee) return { error: "Selected active employee is not available in this school." };
 
   const personColumn = parsed.data.employeeType === "teacher" ? "teacher_id" : "staff_id";
   const { data: current, error: currentError } = await supabase.from("payroll_compensations").select("id")
     .eq("school_id", schoolId).eq(personColumn, employee.id).maybeSingle();
-  if (currentError) return { error: "Existing salary profile load nahi ho saka." };
+  if (currentError) return { error: "The existing salary profile could not be loaded." };
   const salaryProfile = {
     school_id: schoolId,
     teacher_id: parsed.data.employeeType === "teacher" ? employee.id : null,
@@ -66,18 +66,18 @@ export async function savePayrollCompensation(_: PayrollFormState | undefined, f
   const { error } = current
     ? await supabase.from("payroll_compensations").update(salaryProfile).eq("id", current.id).eq("school_id", schoolId)
     : await supabase.from("payroll_compensations").insert(salaryProfile);
-  if (error) return { error: "Salary profile save nahi ho saka." };
+  if (error) return { error: "Salary profile could not be saved." };
   revalidatePayroll();
-  return { success: "Monthly salary profile save ho gaya." };
+  return { success: "Monthly salary profile saved." };
 }
 
 export async function addPayrollComponent(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
   const parsed = compensationComponentSchema.safeParse(fields(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Salary component invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Salary component is invalid." };
   const { supabase, schoolId, user } = await requirePayrollContext("manage");
   const { data: compensation, error: compensationError } = await supabase.from("payroll_compensations")
     .select("id").eq("id", parsed.data.compensationId).eq("school_id", schoolId).maybeSingle();
-  if (compensationError) return { error: "Salary profile verify nahi ho saka." };
+  if (compensationError) return { error: "Salary profile could not be verified." };
   if (!compensation) return { error: "Selected salary profile is unavailable." };
   const { error } = await supabase.from("payroll_compensation_components").insert({
     school_id: schoolId,
@@ -87,9 +87,9 @@ export async function addPayrollComponent(_: PayrollFormState | undefined, formD
     amount: parsed.data.amount,
     created_by: user.id,
   });
-  if (error) return { error: "Recurring salary component add nahi ho saka." };
+  if (error) return { error: "Recurring salary component could not be added." };
   revalidatePayroll();
-  return { success: "Recurring salary component add ho gaya." };
+  return { success: "Recurring salary component added." };
 }
 
 export async function setPayrollComponentActive(formData: FormData): Promise<void> {
@@ -114,20 +114,20 @@ export async function setPayrollCompensationActive(formData: FormData): Promise<
 
 export async function generatePayroll(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
   const parsed = payrollPeriodSchema.safeParse(fields(formData));
-  if (!parsed.success) return { error: "Valid payroll month select karein." };
+  if (!parsed.success) return { error: "Select a valid payroll month." };
   const { supabase, schoolId } = await requirePayrollContext("manage");
   const { data, error } = await supabase.rpc("generate_school_payroll", {
     target_school_id: schoolId,
     target_period_start: `${parsed.data.period}-01`,
   });
   if (error) {
-    if (error.code === "23505") return { error: "Is month ka payroll run pehle se maujood hai." };
-    if (error.message.includes("No active employees")) return { error: "Payroll ke liye active salary profiles nahi mile." };
-    if (error.message.includes("Configure the payroll policy")) return { error: "Pehle Payroll settings mein policy configure karein." };
-    return { error: "Payroll calculate nahi ho saka. Settings aur attendance check karein." };
+    if (error.code === "23505") return { error: "A payroll run already exists for this month." };
+    if (error.message.includes("No active employees")) return { error: "No active salary profiles were found for payroll." };
+    if (error.message.includes("Configure the payroll policy")) return { error: "Configure the payroll policy in Payroll settings first." };
+    return { error: "Payroll could not be calculated. Check the settings and attendance." };
   }
   revalidatePayroll();
-  return { success: `Payroll run generate ho gaya (${String(data)}).` };
+  return { success: `Payroll run generated (${String(data)}).` };
 }
 
 export async function approvePayroll(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
@@ -139,19 +139,19 @@ export async function approvePayroll(_: PayrollFormState | undefined, formData: 
     target_school_id: schoolId,
     target_payroll_run_id: runId,
   });
-  if (error) return { error: "Payroll run approve nahi ho saka. Run state check karke dobara try karein." };
+  if (error) return { error: "Payroll run could not be approved. Check its status and try again." };
   revalidatePayroll();
   revalidatePath(`/payroll/${runId}`);
-  return { success: "Payroll run approve ho gaya. Ab individual salaries record paid kar sakte hain." };
+  return { success: "Payroll run approved. You can now record individual salary payments." };
 }
 
 export async function settlePayrollItem(_: PayrollFormState | undefined, formData: FormData): Promise<PayrollFormState> {
   const parsed = payrollSettlementSchema.safeParse(fields(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payment details invalid hain." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payment details are invalid." };
   const { supabase, schoolId } = await requirePayrollContext("manage");
   const { data: item, error: itemError } = await supabase.from("payroll_items").select("payroll_run_id")
     .eq("id", parsed.data.payrollItemId).eq("school_id", schoolId).maybeSingle();
-  if (itemError) return { error: "Payroll item verify nahi ho saka." };
+  if (itemError) return { error: "Payroll item could not be verified." };
   if (!item) return { error: "Selected payroll item is unavailable." };
   const { error } = await supabase.rpc("settle_school_payroll_item", {
     target_school_id: schoolId,
@@ -160,11 +160,11 @@ export async function settlePayrollItem(_: PayrollFormState | undefined, formDat
     target_reference: parsed.data.reference,
   });
   if (error) {
-    if (error.message.includes("Approve this payroll run")) return { error: "Pehle payroll run approve karein." };
-    if (error.message.includes("already paid")) return { error: "Ye payroll item pehle paid record ho chuka hai." };
-    return { error: "Salary payment record save nahi ho saka." };
+    if (error.message.includes("Approve this payroll run")) return { error: "Approve the payroll run first." };
+    if (error.message.includes("already paid")) return { error: "This payroll item has already been recorded as paid." };
+    return { error: "Salary payment could not be recorded." };
   }
   revalidatePayroll();
   revalidatePath(`/payroll/${item.payroll_run_id}`);
-  return { success: "Salary payment record ho gayi aur expense register update ho gaya." };
+  return { success: "Salary payment recorded and expense register updated." };
 }

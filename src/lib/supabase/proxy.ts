@@ -26,7 +26,7 @@ export async function updateSession(request: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
-  const isAuthRoute = ["/sign-in", "/forgot-password", "/reset-password"].includes(request.nextUrl.pathname);
+  const isAuthRoute = ["/sign-in", "/forgot-password"].includes(request.nextUrl.pathname);
   const isProtectedRoute = !isAuthRoute;
 
   if (!user && isProtectedRoute) {
@@ -37,6 +37,14 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isProtectedRoute) {
+    const { error: lifecycleSyncError } = await supabase.rpc("sync_user_school_lifecycle", {
+      target_user_id: user.id,
+    });
+    if (lifecycleSyncError) {
+      console.error("School lifecycle status could not be synchronized for the active session.", lifecycleSyncError);
+      return NextResponse.json({ error: "School subscription status could not be verified." }, { status: 503 });
+    }
+
     const { data: accountActive, error } = await supabase.rpc("is_account_active", {
       target_user_id: user.id,
     });
@@ -51,6 +59,13 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthRoute && request.nextUrl.pathname === "/sign-in") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (user && isProtectedRoute) {
+    const selectedSchoolId = request.cookies.get("schooliva_admin_school")?.value
+      ?? request.cookies.get("schooliva_selected_school")?.value
+      ?? "default";
+    response.headers.set("x-schooliva-offline-scope", `${user.id}:${selectedSchoolId}`);
   }
 
   return response;

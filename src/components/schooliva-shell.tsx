@@ -24,11 +24,15 @@ export const navGroups = [
     items: [
       { label: "Admissions", href: "/admissions", icon: "admissions" },
       { label: "Students", href: "/students", icon: "students" },
+      { label: "Parents / Guardians", href: "/parents", icon: "students" },
       { label: "Attendance", href: "/attendance", icon: "attendance" },
       { label: "Timetable", href: "/timetable", icon: "timetable" },
+      { label: "Subjects & Classes", href: "/curriculum", icon: "students" },
       { label: "Exams", href: "/exams", icon: "exams" },
       { label: "Results", href: "/results", icon: "results" },
-      { label: "SLC / TC", href: "/slc-tc", icon: "documents" },
+      { label: "Assignments", href: "/assignments", icon: "documents" },
+      { label: "Parent workspace", href: "/parent", icon: "students" },
+      { label: "Certificates", href: "/certificates", icon: "documents" },
     ],
   },
   {
@@ -49,6 +53,7 @@ export const navGroups = [
       { label: "Candidates", href: "/hrm/candidates", icon: "candidates" },
       { label: "Interviews", href: "/hrm/interviews", icon: "interviews" },
       { label: "Employees", href: "/hrm/employees", icon: "teachers" },
+      { label: "Employee documents", href: "/documents", icon: "documents" },
       { label: "Employee exits", href: "/hrm/exits", icon: "users" },
       { label: "People attendance", href: "/people-attendance", icon: "attendance" },
       { label: "Leave", href: "/leave", icon: "leave" },
@@ -70,7 +75,6 @@ export const navGroups = [
     title: "Communication",
     items: [
       { label: "Notifications", href: "/notifications", icon: "notifications" },
-      { label: "Documents", href: "/documents", icon: "documents" },
     ],
   },
   {
@@ -78,6 +82,7 @@ export const navGroups = [
     items: [
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Settings", href: "/setup", icon: "settings" },
+      { label: "Role permissions", href: "/setup/permissions", icon: "settings" },
       { label: "Audit Logs", href: "/audit", icon: "audit" },
     ],
   },
@@ -166,7 +171,7 @@ export function SchoolivaShell({
   userAvatarUrl,
   unreadNotifications = 0,
   showMasterAdminNav = false,
-  showUserAccounts = false,
+  visibleNavHrefs = [],
   schoolContext,
   schoolContextAction,
   brandingTheme,
@@ -184,7 +189,7 @@ export function SchoolivaShell({
   userAvatarUrl?: string | null;
   unreadNotifications?: number;
   showMasterAdminNav?: boolean;
-  showUserAccounts?: boolean;
+  visibleNavHrefs?: string[];
   schoolContext?: string;
   schoolContextAction?: React.ReactNode;
   brandingTheme?: BrandingTheme;
@@ -204,9 +209,13 @@ export function SchoolivaShell({
     };
   }, []);
 
-  const navGroupsWithAdmin = navGroups.map((group) => group.title === "HRM"
-    ? { ...group, items: group.items.filter((item) => item.href !== "/users" || showUserAccounts) }
-    : group) as Array<{ title: string; items: Array<{ label: string; href: string; icon: string }> }>;
+  const visibleNavHrefSet = new Set(visibleNavHrefs);
+  const navGroupsWithAdmin = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => visibleNavHrefSet.has(item.href)),
+    }))
+    .filter((group) => group.items.length > 0) as Array<{ title: string; items: Array<{ label: string; href: string; icon: string }> }>;
   if (showMasterAdminNav) {
     navGroupsWithAdmin.push({
       title: "MASTER ADMIN",

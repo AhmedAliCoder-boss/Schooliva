@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type ThemeMode = "light" | "dark" | "system";
 
 export type BrandingThemeInput = {
@@ -160,7 +162,7 @@ export function buildBrandingCssVars(theme: BrandingTheme) {
   } as Record<string, string>;
 }
 
-export async function getSchoolBrandingForSchool(supabase: any, schoolId: string) {
+export async function getSchoolBrandingForSchool(supabase: SupabaseClient, schoolId: string) {
   const { data: branding } = await supabase.from("school_branding").select("id,school_id,logo_path,logo_dark_path,favicon_path,primary_color,secondary_color,accent_color,background_color,foreground_color,card_color,muted_color,border_color,success_color,warning_color,destructive_color,info_color,theme_mode").eq("school_id", schoolId).maybeSingle();
 
   if (!branding) {

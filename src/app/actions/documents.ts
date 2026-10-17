@@ -74,21 +74,63 @@ export async function getSlcTcStudentDetails(studentId: string): Promise<{
 
 export async function issueCertificate(_: DocumentFormState | undefined, formData: FormData): Promise<DocumentFormState> {
   const parsed = certificateSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Certificate form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Certificate form is invalid." };
   const { supabase, schoolId, user } = await requireDocumentContext("manage");
   const requiresApproval = parsed.data.certificateType === "character" || parsed.data.certificateType === "leaving";
+  const requiresEnrollment = parsed.data.certificateType === "bonafide" || parsed.data.certificateType === "enrollment";
   let certificateNumber = parsed.data.certificateNumber;
-  if (requiresApproval) {
+  let studentCertificateContent: Record<string, string> = {};
+  if (requiresEnrollment) {
+    const [{ data: student, error: studentError }, { data: enrollment, error: enrollmentError }] = await Promise.all([
+      supabase.from("students")
+        .select("id,first_name,middle_name,last_name,admission_number,student_identifier,date_of_birth,admission_date")
+        .eq("id", parsed.data.studentId)
+        .eq("school_id", schoolId)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabase.from("student_enrollments")
+        .select("roll_number,enrolled_on,classes(name),sections(name),academic_sessions(name)")
+        .eq("student_id", parsed.data.studentId)
+        .eq("school_id", schoolId)
+        .eq("status", "active")
+        .order("enrolled_on", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (studentError || enrollmentError) {
+      console.error("Student enrollment could not be verified for certificate issuance.", { studentError, enrollmentError });
+      return { error: "Student enrollment details could not be verified." };
+    }
+    if (!student || !enrollment) return { error: "Bonafide and Enrollment certificates require an active enrolled student." };
+
+    const relationName = (value: { name: string } | { name: string }[] | null) =>
+      Array.isArray(value) ? value[0]?.name ?? "" : value?.name ?? "";
+    const studentName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ");
+    studentCertificateContent = {
+      certificateTitle: parsed.data.certificateType === "bonafide" ? "Bonafide Certificate" : "Enrollment Certificate",
+      studentName,
+      studentIdentifier: student.student_identifier ?? "",
+      admissionNumber: student.admission_number,
+      dateOfBirth: student.date_of_birth ?? "",
+      dateOfAdmission: student.admission_date ?? enrollment.enrolled_on,
+      className: relationName(enrollment.classes),
+      sectionName: relationName(enrollment.sections),
+      academicSession: relationName(enrollment.academic_sessions),
+      rollNumber: enrollment.roll_number ?? "",
+    };
+  }
+  if (requiresApproval || requiresEnrollment) {
     const { data, error } = await supabase.rpc("next_student_certificate_number", { target_school_id: schoolId });
     if (error) {
       console.error("Student certificate number could not be generated.", error);
-      return { error: "A four-digit certificate number could not be generated." };
+      return { error: "A certificate number could not be generated." };
     }
     certificateNumber = data;
   }
   if (!certificateNumber) return { error: "Certificate number is required." };
   const content = {
     ...(parsed.data.content ? { text: parsed.data.content } : {}),
+    ...studentCertificateContent,
     ...(parsed.data.certificateType === "character"
       ? { certificateKind: "character", certificateTitle: "Character Certificate" }
       : {}),
@@ -105,13 +147,12 @@ export async function issueCertificate(_: DocumentFormState | undefined, formDat
   });
   if (error) {
     console.error("Certificate could not be created.", error);
-    return { error: error.code === "23505" ? "Certificate number already exists." : "Certificate issue nahi hua." };
+    return { error: error.code === "23505" ? "Certificate number already exists." : "Certificate could not be issued." };
   }
-  revalidatePath("/documents");
-  revalidatePath("/slc-tc");
+  revalidatePath("/certificates");
   return { success: requiresApproval
-    ? `Certificate ${certificateNumber} approval ke liye bhej diya gaya.`
-    : "Certificate issue ho gaya." };
+    ? `Certificate ${certificateNumber} sent for approval.`
+    : "Certificate issued." };
 }
 
 export async function issueSlcTc(_: DocumentFormState | undefined, formData: FormData): Promise<DocumentFormState> {
@@ -181,8 +222,7 @@ export async function issueSlcTc(_: DocumentFormState | undefined, formData: For
       console.error("Character certificate could not be issued.", error);
       return { error: error.code === "23505" ? "This certificate number has already been used." : "Character certificate could not be issued." };
     }
-    revalidatePath("/slc-tc");
-    revalidatePath("/documents");
+    revalidatePath("/certificates");
     return { success: `Character certificate ${certificateNumber} sent for principal / school admin approval.` };
   }
 
@@ -324,8 +364,7 @@ export async function issueSlcTc(_: DocumentFormState | undefined, formData: For
       console.error("SLC/TC could not be issued.", error);
       return { error: "SLC/TC could not be issued." };
     }
-  revalidatePath("/slc-tc");
-  revalidatePath("/documents");
+  revalidatePath("/certificates");
   return { success: `${parsed.data.certificateTitle} ${certificateNumber} sent for principal / school admin approval.` };
 }
 
@@ -362,8 +401,7 @@ export async function reviewStudentCertificate(
     return { error: "Certificate could not be reviewed. Refresh and try again." };
   }
 
-  revalidatePath("/slc-tc");
-  revalidatePath("/documents");
+  revalidatePath("/certificates");
   revalidatePath("/students");
   revalidatePath(`/students/${certificate.student_id}`);
   return { success: parsed.data.decision === "approve"

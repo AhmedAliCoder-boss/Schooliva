@@ -10,6 +10,7 @@ import type { HrmFormState } from "@/lib/hrm/schemas";
 
 type EmployeeType = "teacher" | "staff";
 type DocumentType = "profile_photo" | "national_id" | "qualification" | "experience" | "police_verification";
+export type EmployeeDocumentOption = { id: string; type: EmployeeType; label: string };
 
 function Feedback({ state }: { state: HrmFormState | undefined }) {
   return <>
@@ -22,13 +23,19 @@ export function EmployeeVerificationUploadForm({
   employeeId,
   employeeType,
   documentType,
+  employeeOptions,
 }: {
-  employeeId: string;
-  employeeType: EmployeeType;
+  employeeId?: string;
+  employeeType?: EmployeeType;
   documentType?: DocumentType;
+  employeeOptions?: EmployeeDocumentOption[];
 }) {
   const [state, action] = useActionState(updateEmployeeVerification, undefined);
   const isPhoto = documentType === "profile_photo";
+  const [selectedEmployee, setSelectedEmployee] = useState(
+    employeeOptions?.[0] ? `${employeeOptions[0].type}:${employeeOptions[0].id}` : `${employeeType ?? "teacher"}:${employeeId ?? ""}`,
+  );
+  const [selectedType, selectedId] = selectedEmployee.split(":");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
 
@@ -53,8 +60,24 @@ export function EmployeeVerificationUploadForm({
   }
 
   return <form action={action} className="hrm-verification-upload-form">
-    <input type="hidden" name="employeeId" value={employeeId} />
-    <input type="hidden" name="employeeType" value={employeeType} />
+    {employeeOptions
+      ? <>
+          <label>Employee
+            <select
+              value={selectedEmployee}
+              onChange={(event) => setSelectedEmployee(event.currentTarget.value)}
+              required
+            >
+              {employeeOptions.map((employee) => <option key={`${employee.type}:${employee.id}`} value={`${employee.type}:${employee.id}`}>{employee.label}</option>)}
+            </select>
+          </label>
+          <input type="hidden" name="employeeId" value={selectedId ?? ""} />
+          <input type="hidden" name="employeeType" value={selectedType ?? ""} />
+        </>
+      : <>
+          <input type="hidden" name="employeeId" value={employeeId ?? ""} />
+          <input type="hidden" name="employeeType" value={employeeType ?? ""} />
+        </>}
     {documentType
       ? <input type="hidden" name="documentType" value={documentType} />
       : <label>Document type

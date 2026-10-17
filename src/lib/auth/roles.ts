@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 
-export const MASTER_ADMIN_ROLE_SLUGS = ["super_admin", "master_admin"] as const;
-export const ADMIN_ACCOUNT_MANAGEMENT_ROLES = ["super_admin", "master_admin", "school_admin", "principal"] as const;
+export const MASTER_ADMIN_ROLE_SLUGS = ["super_admin"] as const;
+export const ADMIN_ACCOUNT_MANAGEMENT_ROLES = ["super_admin", "school_admin", "principal"] as const;
 export const SCHOOL_STAFF_ROLE_SLUGS = [
   "school_admin",
   "principal",
   "teacher",
   "accountant",
   "hr_manager",
+  "hr_staff_manager",
   "librarian",
   "transport_manager",
   "cafeteria_manager",
@@ -22,6 +23,26 @@ export const SCHOOL_MANAGED_ACCOUNT_ROLE_SLUGS = [
   "cafeteria_manager",
   "staff",
 ] as const;
+
+export const SCHOOL_DASHBOARD_ROLE_SLUGS = [
+  "super_admin",
+  "school_admin",
+  "principal",
+  "teacher",
+  "student",
+  "parent",
+  "accountant",
+  "librarian",
+  "transport_manager",
+  "hr_manager",
+  "hr_staff_manager",
+] as const;
+
+export function normalizeSchoolRoleSlug(roleSlug: string | null | undefined): string | null {
+  const normalized = roleSlug?.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized === "hr_staff_manager" ? "hr_manager" : normalized;
+}
 
 export function isMasterAdminRole(roleSlug: string | null | undefined): boolean {
   if (!roleSlug) return false;

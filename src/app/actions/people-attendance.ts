@@ -10,10 +10,10 @@ export async function submitPeopleAttendance(_: PeopleAttendanceFormState | unde
   try {
     records = JSON.parse(String(formData.get("records") ?? "[]"));
   } catch {
-    return { error: "Attendance records invalid hain." };
+    return { error: "Attendance records are invalid." };
   }
   const parsed = peopleAttendanceSubmissionSchema.safeParse({ attendanceDate: formData.get("attendanceDate"), records });
-  if (!parsed.success) return { error: `Attendance form complete nahi hai: ${parsed.error.issues[0]?.path.join(".") || "records"}.` };
+  if (!parsed.success) return { error: `Complete the attendance form: ${parsed.error.issues[0]?.path.join(".") || "records"}.` };
   const { supabase, schoolId, user } = await requirePeopleAttendanceContext("manage");
   const teacherIds = parsed.data.records.filter((record) => record.personType === "teacher").map((record) => record.personId);
   const staffIds = parsed.data.records.filter((record) => record.personType === "staff").map((record) => record.personId);
@@ -22,10 +22,10 @@ export async function submitPeopleAttendance(_: PeopleAttendanceFormState | unde
     staffIds.length ? supabase.from("staff").select("id").eq("school_id", schoolId).in("id", staffIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("leave_requests").select("teacher_id,staff_id").eq("school_id", schoolId).eq("status", "approved").lte("start_date", parsed.data.attendanceDate).gte("end_date", parsed.data.attendanceDate),
   ]);
-  if (teachersError || staffError || leavesError) return { error: "Attendance ya approved leave data verify nahi ho saka." };
+  if (teachersError || staffError || leavesError) return { error: "Attendance or approved leave data could not be verified." };
   const validTeacherIds = new Set((teachers ?? []).map((person) => person.id));
   const validStaffIds = new Set((staff ?? []).map((person) => person.id));
-  if (parsed.data.records.some((record) => record.personType === "teacher" ? !validTeacherIds.has(record.personId) : !validStaffIds.has(record.personId))) return { error: "People record school se match nahi karta." };
+  if (parsed.data.records.some((record) => record.personType === "teacher" ? !validTeacherIds.has(record.personId) : !validStaffIds.has(record.personId))) return { error: "The people record does not match this school." };
   const leaveKeys = new Set((approvedLeaves ?? []).map((leave) => `${leave.teacher_id ? "teacher" : "staff"}:${leave.teacher_id ?? leave.staff_id}`));
   const rows = parsed.data.records.map((record) => {
     const personKey = `${record.personType}:${record.personId}`;
@@ -50,7 +50,7 @@ export async function submitPeopleAttendance(_: PeopleAttendanceFormState | unde
       ? supabase.from("people_attendance").update(row).eq("id", existingId).eq("school_id", schoolId)
       : supabase.from("people_attendance").insert(row);
   }));
-  if (saveResults.some((result) => result.error)) return { error: "People attendance save nahi ho saki." };
+  if (saveResults.some((result) => result.error)) return { error: "People attendance could not be saved." };
   revalidatePath("/people-attendance");
-  return { success: `${rows.length} teachers/staff ki attendance save ho gayi.` };
+  return { success: `Attendance saved for ${rows.length} teachers and staff.` };
 }

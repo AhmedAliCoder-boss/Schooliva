@@ -7,9 +7,15 @@ import {
   hireSubjectAssignmentsSchema,
   interviewSchema,
   jobOpeningSchema,
+  postgresUuid,
 } from "../../src/lib/hrm/schemas";
 
 describe("HRM recruitment validation", () => {
+  it("accepts PostgreSQL UUID values that do not use RFC version bits", () => {
+    expect(postgresUuid.safeParse("60000000-0000-0000-0000-000000000002").success).toBe(true);
+    expect(postgresUuid.safeParse("not-a-uuid").success).toBe(false);
+  });
+
   it("requires a job title and validates supported employment and posting states", () => {
     expect(jobOpeningSchema.safeParse({ title: "Teacher", employeeType: "teacher", employmentType: "full_time", status: "open" }).success).toBe(true);
     expect(jobOpeningSchema.safeParse({ title: "Teacher", employeeType: "staff", employmentType: "full_time", status: "open" }).success).toBe(true);

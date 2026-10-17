@@ -23,7 +23,7 @@ export async function promoteStudent(
   formData: FormData,
 ): Promise<StudentFormState> {
   const parsed = promotionSchema.safeParse(Object.fromEntries(formData.entries()));
-  if (!parsed.success) return { error: "Promotion form complete nahi hai." };
+  if (!parsed.success) return { error: "Complete the promotion form." };
 
   const { supabase, schoolId, user } = await requireStudentContext("update");
   const { sourceSessionId, targetSessionId, studentId, classId, sectionId } = parsed.data;
@@ -36,9 +36,9 @@ export async function promoteStudent(
     .maybeSingle();
   if (sourceError) {
     console.error("Could not load source academic session for promotion.", sourceError);
-    return { error: "Academic session verify nahi ho saka." };
+    return { error: "The academic session could not be verified." };
   }
-  if (!sourceSession) return { error: "Academic session nahi mila." };
+  if (!sourceSession) return { error: "Academic session not found." };
 
   const [{ data: targetSessions, error: targetError }, { data: exams, error: examsError }, { data: roleRows, error: roleError }] = await Promise.all([
     supabase.from("academic_sessions").select("id,name,starts_on").eq("school_id", schoolId).gt("starts_on", sourceSession.ends_on).neq("status", "archived").order("starts_on").limit(1),
@@ -47,13 +47,13 @@ export async function promoteStudent(
   ]);
   if (targetError || examsError || roleError) {
     console.error("Could not verify promotion eligibility.", { targetError, examsError, roleError });
-    return { error: "Promotion eligibility verify nahi ho saki." };
+    return { error: "Promotion eligibility could not be verified." };
   }
-  if (sourceSession.status !== "completed") return { error: "Promotion tab hogi jab academic session completed mark ho." };
-  if (!exams?.length || exams.some((exam) => exam.status !== "published")) return { error: "Is session ke tamam exam results pehle publish hon." };
+  if (sourceSession.status !== "completed") return { error: "The academic session must be marked as completed before promotion." };
+  if (!exams?.length || exams.some((exam) => exam.status !== "published")) return { error: "All exam results for this session must be published first." };
 
   const nextSession = targetSessions?.[0];
-  if (!nextSession || nextSession.id !== targetSessionId) return { error: "Next academic session ab available nahi hai." };
+  if (!nextSession || nextSession.id !== targetSessionId) return { error: "The next academic session is not available." };
 
   const roleSlugs = (roleRows ?? [])
     .map((row) => relation<{ slug: string }>(row.roles)?.slug)
@@ -70,9 +70,9 @@ export async function promoteStudent(
     .maybeSingle();
   if (enrollmentError) {
     console.error("Could not load source enrollment for promotion.", enrollmentError);
-    return { error: "Student ka current enrollment check nahi ho saka." };
+    return { error: "The student's current enrollment could not be checked." };
   }
-  if (!sourceEnrollment) return { error: "Student ka is session mein active enrollment nahi mila." };
+  if (!sourceEnrollment) return { error: "The student has no active enrollment in this session." };
 
   const { count: publishedMarkCount, error: publishedMarksError } = await supabase
     .from("published_exam_results")
@@ -83,12 +83,12 @@ export async function promoteStudent(
     .eq("class_id", sourceEnrollment.class_id);
   if (publishedMarksError) {
     console.error("Could not verify published student results.", publishedMarksError);
-    return { error: "Student ke published results verify nahi ho sake." };
+    return { error: "The student's published results could not be verified." };
   }
-  if (!publishedMarkCount) return { error: "Student ke published marks ke baghair promotion nahi ho sakti." };
+  if (!publishedMarkCount) return { error: "The student cannot be promoted without published marks." };
 
   if (!isSchoolAdmin) {
-    if (!roleSlugs.includes("teacher")) return { error: "Sirf class teacher ya school admin promotion kar sakta hai." };
+    if (!roleSlugs.includes("teacher")) return { error: "Only the class teacher or school administrator can promote students." };
     const { data: teacher, error: teacherError } = await supabase
       .from("teachers")
       .select("id")
@@ -98,9 +98,9 @@ export async function promoteStudent(
       .maybeSingle();
     if (teacherError) {
       console.error("Could not verify the promoting class teacher.", teacherError);
-      return { error: "Teacher access verify nahi ho saka." };
+      return { error: "Teacher access could not be verified." };
     }
-    if (!teacher) return { error: "Active teacher profile nahi mila." };
+    if (!teacher) return { error: "No active teacher profile was found." };
     const { data: sourceSection, error: sectionTeacherError } = await supabase
       .from("sections")
       .select("class_teacher_id")
@@ -109,9 +109,9 @@ export async function promoteStudent(
       .maybeSingle();
     if (sectionTeacherError) {
       console.error("Could not verify class-teacher assignment.", sectionTeacherError);
-      return { error: "Class teacher assignment check nahi ho saki." };
+      return { error: "The class teacher assignment could not be checked." };
     }
-    if (sourceSection?.class_teacher_id !== teacher.id) return { error: "Aap sirf apni assigned class ke students promote kar sakte hain." };
+    if (sourceSection?.class_teacher_id !== teacher.id) return { error: "You can only promote students in your assigned class." };
   }
 
   const [{ data: targetClass, error: classError }, { data: targetSection, error: targetSectionError }, { data: existingEnrollment, error: existingError }] = await Promise.all([
@@ -121,10 +121,10 @@ export async function promoteStudent(
   ]);
   if (classError || targetSectionError || existingError) {
     console.error("Could not verify target enrollment selection.", { classError, targetSectionError, existingError });
-    return { error: "Target class ya section verify nahi ho saka." };
+    return { error: "The target class or section could not be verified." };
   }
-  if (!targetClass || !targetSection || targetSection.class_id !== classId) return { error: "Selected section is class ka nahi hai." };
-  if (existingEnrollment) return { error: "Student next session mein pehle se enrolled hai." };
+  if (!targetClass || !targetSection || targetSection.class_id !== classId) return { error: "The selected section does not belong to this class." };
+  if (existingEnrollment) return { error: "The student is already enrolled in the next session." };
 
   const { error: insertError } = await supabase.from("student_enrollments").insert({
     school_id: schoolId,
@@ -137,7 +137,7 @@ export async function promoteStudent(
   });
   if (insertError) {
     console.error("Student promotion enrollment could not be created.", insertError);
-    return { error: insertError.code === "23505" ? "Student next session mein pehle se enrolled hai." : "Student promote nahi ho saka." };
+    return { error: insertError.code === "23505" ? "The student is already enrolled in the next session." : "The student could not be promoted." };
   }
 
   const { data: completedEnrollment, error: completionError } = await supabase
@@ -158,13 +158,13 @@ export async function promoteStudent(
       .eq("academic_session_id", targetSessionId);
     if (cleanupError) {
       console.error("Could not remove the incomplete next-session enrollment.", cleanupError);
-      return { error: "Promotion adhuri hai; admin se contact karein." };
+      return { error: "Promotion is incomplete. Contact your administrator." };
     }
-    return { error: "Previous session enrollment complete nahi ho saki; promotion cancel kar di." };
+    return { error: "The previous session enrollment could not be completed, so the promotion was canceled." };
   }
 
   revalidatePath("/students/promotions");
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
-  return { success: `Student ${nextSession.name} ke liye promote ho gaya.` };
+  return { success: `Student promoted to ${nextSession.name}.` };
 }

@@ -628,41 +628,6 @@ export async function setManagedAccountPassword(
   return successState("Password updated successfully.");
 }
 
-export async function sendManagedAccountPasswordReset(
-  _previousState: AccountActionState,
-  formData: FormData,
-): Promise<AccountActionState> {
-  const actor = await getActor();
-  if (!actor.user) return errorState("Sign in with an active administrator account to send a reset.");
-  const userId = uuidSchema.safeParse(readText(formData, "userId"));
-  const schoolValue = readText(formData, "schoolId");
-  const schoolId = schoolValue ? uuidSchema.safeParse(schoolValue) : { success: true as const, data: null };
-  if (!userId.success || !schoolId.success) return errorState("The account reference is invalid.");
-  if (!await canManageAccount(actor.supabase, schoolId.data, actor.isMasterAdmin, userId.data)) return errorState("You are not authorized to reset this account.");
-  const protection = await isProtectedAccount(actor.supabase, userId.data);
-  if (protection.error) return errorState("The account protection status could not be verified.");
-  if (protection.protected) return errorState("Platform administrator accounts are protected.");
-
-  const adminClient = createSupabaseAdminClient();
-  if (!adminClient) return errorState("Server-side Supabase Auth administration is not configured.");
-  const { data: account, error: readError } = await adminClient.auth.admin.getUserById(userId.data);
-  if (readError || !account.user?.email) return errorState("The account has no usable email address for password recovery.");
-
-  const origin = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!origin) return errorState("Password recovery is not configured with a trusted site URL.");
-  const { error } = await actor.supabase.auth.resetPasswordForEmail(account.user.email, {
-    redirectTo: `${origin.replace(/\/+$/, "")}/reset-password`,
-  });
-  if (error) return errorState(error.message);
-
-  const audit = await writeAccountAudit(actor.supabase, userId.data, schoolId.data, "password_reset_initiated", {
-    method: "email_recovery",
-  });
-  revalidateAccountSurfaces(userId.data);
-  if (audit.error) return errorState("The reset email was requested, but the audit entry failed. Contact support.");
-  return successState("Password reset email requested through Supabase Auth.");
-}
-
 export async function changeManagedAccountStatus(
   _previousState: AccountActionState,
   formData: FormData,

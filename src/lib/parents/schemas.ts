@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-const required = (label: string) => z.string().trim().min(1, `${label} required hai.`);
+const required = (label: string) => z.string().trim().min(1, `${label} is required.`);
 const optional = z.string().trim().optional();
 
 export const parentSchema = z.object({
   firstName: required("First name"), lastName: required("Last name"), relationship: optional,
-  phone: optional, email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")), address: optional,
+  phone: optional, email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")), address: optional,
   emergencyContactName: optional, emergencyContactPhone: optional, profileId: optional,
 });
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { ADMIN_SCHOOL_COOKIE } from "@/lib/admin/school-context";
 import { isMasterAdminUser } from "@/lib/auth/roles";
 import { resolveAuthorizedSchoolId } from "@/lib/auth/school-access";
 import { reconcileInvoiceStatus } from "@/lib/billing-reconciliation";
-import { resolveContractRenewalWindow } from "@/lib/contract-renewal";
+import { addDaysToDate, getBillingPeriodEnd, getPlatformInvoiceAmount, type PlatformBillingModel } from "@/lib/platform-billing";
 import { recordAuditEvent } from "@/lib/audit/logging";
 import { sanitizeColor } from "@/lib/school-branding";
 import { createClient } from "@/lib/supabase/server";
@@ -16,14 +17,16 @@ import { createClient } from "@/lib/supabase/server";
 const schoolSchema = z.object({
   name: z.string().trim().min(2),
   code: z.string().trim().min(2),
+  trialDays: z.coerce.number().int().min(1).max(90).default(30),
   email: z.string().trim().email().optional().or(z.literal("")),
   phone: z.string().trim().optional().or(z.literal("")),
   address: z.string().trim().optional().or(z.literal("")),
   city: z.string().trim().optional().or(z.literal("")),
   state: z.string().trim().optional().or(z.literal("")),
   country: z.string().trim().optional().or(z.literal("")),
-  status: z.enum(["active", "inactive", "suspended"]).default("active"),
 });
+
+const postgresUuidSchema = z.string().trim().regex(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
 
 const schoolBrandingSchema = z.object({
   schoolId: z.string().uuid(),
@@ -43,20 +46,18 @@ const schoolBrandingSchema = z.object({
 });
 
 const platformContractSchema = z.object({
-  schoolId: z.string().uuid(),
-  contractNumber: z.string().trim().min(2),
+  schoolId: postgresUuidSchema,
+  contractNumber: z.string().trim().min(2).or(z.literal("")).default(""),
   planName: z.string().trim().min(2),
   status: z.enum(["draft", "active", "paused", "expired", "cancelled"]).default("draft"),
   pricingModel: z.enum(["monthly", "annual", "custom"]).default("monthly"),
-  monthlyAmount: z.coerce.number().nonnegative().default(0),
+  monthlyAmount: z.coerce.number().positive(),
   startDate: z.string().trim().optional().or(z.literal("")),
   endDate: z.string().trim().optional().or(z.literal("")),
-  renewalDate: z.string().trim().optional().or(z.literal("")),
 });
 
 const platformBillSchema = z.object({
-  schoolId: z.string().uuid(),
-  billNumber: z.string().trim().min(2),
+  schoolId: z.string().trim().min(1),
   description: z.string().trim().min(2),
   amount: z.coerce.number().positive(),
   dueDate: z.string().trim().min(1),
@@ -75,7 +76,7 @@ const platformBillingReconciliationSchema = z.object({
 });
 
 const schoolTrialSchema = z.object({
-  schoolId: z.string().uuid(),
+  schoolId: postgresUuidSchema,
   trialName: z.string().trim().min(2),
   status: z.enum(["pending", "active", "expired", "converted"]).default("pending"),
   startsOn: z.string().trim().optional().or(z.literal("")),
@@ -90,16 +91,89 @@ const rolePermissionSchema = z.object({
 });
 
 const contractLifecycleSchema = z.object({
-  contractId: z.string().uuid(),
+  contractId: postgresUuidSchema,
+});
+
+const trialLifecycleSchema = z.object({
+  trialId: postgresUuidSchema,
+  status: z.enum(["pending", "active", "expired"]),
+  endsOn: z.string().trim().min(1),
+  seats: z.coerce.number().int().positive(),
+  notes: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
 const lifecycleActivationSchema = z.object({
-  schoolId: z.string().uuid(),
+  schoolId: postgresUuidSchema,
   planName: z.string().trim().min(2).default("Starter"),
-  monthlyAmount: z.coerce.number().nonnegative().default(0),
-  contractNumber: z.string().trim().min(2).default("CT-LIVE"),
-  trialId: z.string().uuid().optional(),
+  pricingModel: z.enum(["monthly", "annual", "custom"]).default("monthly"),
+  monthlyAmount: z.coerce.number().positive(),
+  contractNumber: z.string().trim().min(2).optional().or(z.literal("")),
+  endDate: z.string().trim().optional().or(z.literal("")),
+  trialId: postgresUuidSchema.optional(),
 });
+
+async function createContractInvoice({
+  supabase,
+  contractId,
+  schoolId,
+  planName,
+  pricingModel,
+  monthlyAmount,
+  startDate,
+  endDate,
+  dueDate,
+  createdBy,
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  contractId: string;
+  schoolId: string;
+  planName: string;
+  pricingModel: PlatformBillingModel;
+  monthlyAmount: number;
+  startDate: string;
+  endDate?: string | null;
+  dueDate?: string;
+  createdBy: string;
+}) {
+  let periodEnd: string;
+  try {
+    periodEnd = getBillingPeriodEnd(startDate, pricingModel, endDate);
+  } catch (error) {
+    console.error("Contract billing period is invalid.", error);
+    return false;
+  }
+  const existing = await supabase.from("platform_bills")
+    .select("id")
+    .eq("contract_id", contractId)
+    .eq("billing_period_start", startDate)
+    .maybeSingle();
+  if (existing.error) return false;
+  if (existing.data) return true;
+
+  const billNumber = `PLT-${startDate.replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const { error } = await supabase.from("platform_bills").insert({
+    school_id: schoolId,
+    contract_id: contractId,
+    bill_number: billNumber,
+    description: `${planName} subscription (${startDate} to ${periodEnd})`,
+    total_amount: getPlatformInvoiceAmount(pricingModel, monthlyAmount),
+    due_date: dueDate ?? addDaysToDate(startDate, 7),
+    created_by: createdBy,
+    billing_period_start: startDate,
+    billing_period_end: periodEnd,
+  });
+  if (!error) return true;
+  if (error.code === "23505") {
+    const { data: matchingBill, error: lookupError } = await supabase.from("platform_bills")
+      .select("id")
+      .eq("contract_id", contractId)
+      .eq("billing_period_start", startDate)
+      .maybeSingle();
+    return Boolean(matchingBill && !lookupError);
+  }
+  console.error("Initial platform contract invoice could not be created.", error);
+  return false;
+}
 
 export async function enterSchoolWorkspace(formData: FormData) {
   const supabase = await createClient();
@@ -128,6 +202,14 @@ export async function selectSchoolWorkspace(formData: FormData) {
 
   const { data: membership } = await supabase.from("user_roles").select("school_id").eq("user_id", user.id).eq("school_id", schoolId.data).maybeSingle();
   if (!membership) redirect("/dashboard?error=not-authorized");
+  const { data: subscriptionAccess, error: accessError } = await supabase.rpc("school_subscription_access_active", {
+    target_school_id: schoolId.data,
+  });
+  if (accessError) {
+    console.error("School subscription access could not be verified.", accessError);
+    redirect("/dashboard?error=school-access-unavailable");
+  }
+  if (subscriptionAccess !== true) redirect("/dashboard?error=school-subscription-inactive");
 
   const cookieStore = await cookies();
   cookieStore.set("schooliva_selected_school", schoolId.data, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
@@ -153,13 +235,13 @@ export async function createSchool(formData: FormData) {
   const parsed = schoolSchema.safeParse({
     name: formData.get("name"),
     code: formData.get("code"),
+    trialDays: formData.get("trialDays") ?? "30",
     email: formData.get("email"),
     phone: formData.get("phone"),
     address: formData.get("address"),
     city: formData.get("city"),
     state: formData.get("state"),
     country: formData.get("country"),
-    status: formData.get("status") ?? "active",
   });
 
   if (!parsed.success) {
@@ -177,7 +259,7 @@ export async function createSchool(formData: FormData) {
     city: parsed.data.city || null,
     state: parsed.data.state || null,
     country: parsed.data.country || null,
-    is_active: parsed.data.status === "active",
+    is_active: true,
     created_by: user.id,
   }).select("id").single();
 
@@ -209,12 +291,12 @@ export async function createSchool(formData: FormData) {
   }
 
   const currentDate = new Date().toISOString().slice(0, 10);
-  const trialEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const trialEndDate = addDaysToDate(currentDate, parsed.data.trialDays - 1);
 
   const { error: trialError } = await supabase.from("school_trials").upsert({
     school_id: newSchool.id,
     trial_name: "Onboarding Trial",
-    status: "pending",
+    status: "active",
     starts_on: currentDate,
     ends_on: trialEndDate,
     seats: 25,
@@ -223,23 +305,6 @@ export async function createSchool(formData: FormData) {
 
   if (trialError) {
     redirect("/admin/schools?error=school-trial-create-failed");
-  }
-
-  const { error: contractError } = await supabase.from("platform_contracts").upsert({
-    school_id: newSchool.id,
-    contract_number: `CT-${Date.now()}`,
-    plan_name: "Starter",
-    pricing_model: "monthly",
-    monthly_amount: 0,
-    status: "draft",
-    start_date: currentDate,
-    end_date: null,
-    renewal_date: null,
-    metadata: { source: "school_onboarding", created_by: user.id },
-  }, { onConflict: "school_id,contract_number" });
-
-  if (contractError) {
-    redirect("/admin/schools?error=school-contract-create-failed");
   }
 
   const { data: schoolAdminRole, error: schoolAdminRoleError } = await supabase
@@ -417,14 +482,13 @@ export async function createPlatformContract(formData: FormData) {
 
   const parsed = platformContractSchema.safeParse({
     schoolId: formData.get("schoolId"),
-    contractNumber: formData.get("contractNumber"),
+    contractNumber: formData.get("contractNumber") ?? "",
     planName: formData.get("planName"),
     status: formData.get("status") ?? "draft",
     pricingModel: formData.get("pricingModel") ?? "monthly",
     monthlyAmount: formData.get("monthlyAmount") ?? "0",
     startDate: formData.get("startDate") ?? "",
     endDate: formData.get("endDate") ?? "",
-    renewalDate: formData.get("renewalDate") ?? "",
   });
 
   if (!parsed.success) {
@@ -442,33 +506,73 @@ export async function createPlatformContract(formData: FormData) {
     redirect("/dashboard?error=not-authorized");
   }
 
-  const { error } = await supabase.from("platform_contracts").insert({
+  const startDate = parsed.data.startDate || new Date().toISOString().slice(0, 10);
+  if (startDate > new Date().toISOString().slice(0, 10)) {
+    redirect("/admin/contracts?error=invalid-contract");
+  }
+  try {
+    getBillingPeriodEnd(startDate, parsed.data.pricingModel, parsed.data.endDate || null);
+  } catch {
+    redirect("/admin/contracts?error=invalid-contract");
+  }
+  if (parsed.data.pricingModel === "custom" && !parsed.data.endDate) {
+    redirect("/admin/contracts?error=invalid-contract");
+  }
+  if (parsed.data.endDate && parsed.data.endDate < startDate) redirect("/admin/contracts?error=invalid-contract");
+  const { data: relatedTrial, error: trialLookupError } = await supabase.from("school_trials")
+    .select("id")
+    .eq("school_id", authorizedSchoolId)
+    .in("status", ["active", "pending"])
+    .gte("ends_on", startDate)
+    .order("starts_on", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (trialLookupError) {
+    console.error("Contract trial could not be loaded.", trialLookupError);
+    redirect("/admin/contracts?error=contract-create-failed");
+  }
+
+  const { data: contract, error } = await supabase.from("platform_contracts").insert({
     school_id: authorizedSchoolId,
     contract_number: parsed.data.contractNumber,
     plan_name: parsed.data.planName,
     pricing_model: parsed.data.pricingModel,
     monthly_amount: parsed.data.monthlyAmount,
-    status: parsed.data.status,
-    start_date: parsed.data.startDate || new Date().toISOString().slice(0, 10),
+    status: "draft",
+    start_date: startDate,
     end_date: parsed.data.endDate || null,
-    renewal_date: parsed.data.renewalDate || null,
-    metadata: { created_by: user.id },
-  });
+    renewal_date: null,
+    metadata: { created_by: user.id, ...(relatedTrial ? { trial_id: relatedTrial.id } : {}) },
+  }).select("id,contract_number").single();
 
-  if (error) {
+  if (error || !contract) {
+    console.error("Platform contract could not be created.", error);
     redirect("/admin/contracts?error=contract-create-failed");
   }
+
+  const invoiceCreated = await createContractInvoice({
+    supabase,
+    contractId: contract.id,
+    schoolId: authorizedSchoolId,
+    planName: parsed.data.planName,
+    pricingModel: parsed.data.pricingModel,
+    monthlyAmount: parsed.data.monthlyAmount,
+    startDate,
+    endDate: parsed.data.endDate || null,
+    createdBy: user.id,
+  });
+  if (!invoiceCreated) redirect("/admin/contracts?error=contract-invoice-create-failed");
 
   await recordAuditEvent(supabase, {
     schoolId: authorizedSchoolId,
     action: "create",
     entityType: "platform_contracts",
-    entityId: undefined,
-    metadata: { contract_number: parsed.data.contractNumber, plan_name: parsed.data.planName, monthly_amount: parsed.data.monthlyAmount },
+    entityId: contract.id,
+    metadata: { contract_number: contract.contract_number, plan_name: parsed.data.planName, monthly_amount: parsed.data.monthlyAmount, pricing_model: parsed.data.pricingModel, status: "draft", initial_invoice_scheduled: true },
     actorId: user.id,
   });
 
-  redirect("/admin/contracts?success=contract-created");
+  redirect("/admin/contracts?success=contract-invoice-scheduled");
 }
 
 export async function createPlatformBill(formData: FormData) {
@@ -480,24 +584,30 @@ export async function createPlatformBill(formData: FormData) {
 
   const parsed = platformBillSchema.safeParse({
     schoolId: formData.get("schoolId"),
-    billNumber: formData.get("billNumber"),
     description: formData.get("description"),
     amount: formData.get("amount"),
     dueDate: formData.get("dueDate"),
   });
-  if (!parsed.success) redirect("/admin/billing?error=invalid-bill");
+  if (!parsed.success) {
+    const hasInvalidSchoolId = parsed.error.issues.some((issue) => issue.path[0] === "schoolId");
+    redirect(hasInvalidSchoolId ? "/admin/billing?error=invalid-school" : "/admin/billing?error=invalid-bill");
+  }
 
-  const { data: allSchools } = await supabase.from("schools").select("id");
+  const { data: allSchools, error: schoolsError } = await supabase.from("schools").select("id");
+  if (schoolsError) redirect("/admin/billing?error=school-lookup-failed");
+  const availableSchoolIds = (allSchools ?? []).map((school) => school.id);
+  if (!availableSchoolIds.length) redirect("/admin/billing?error=school-not-found");
   const schoolId = resolveAuthorizedSchoolId({
     candidateSchoolId: parsed.data.schoolId,
-    availableSchoolIds: (allSchools ?? []).map((school) => school.id),
+    availableSchoolIds,
     isMasterAdmin: true,
   });
   if (!schoolId) redirect("/admin/billing?error=school-not-found");
 
+  const billNumber = `PLT-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().replaceAll("-", "").toUpperCase()}`;
   const { data: bill, error } = await supabase.from("platform_bills").insert({
     school_id: schoolId,
-    bill_number: parsed.data.billNumber,
+    bill_number: billNumber,
     description: parsed.data.description,
     total_amount: parsed.data.amount,
     due_date: parsed.data.dueDate,
@@ -510,7 +620,7 @@ export async function createPlatformBill(formData: FormData) {
     action: "create",
     entityType: "platform_bills",
     entityId: bill.id,
-    metadata: { bill_number: parsed.data.billNumber, amount: parsed.data.amount },
+    metadata: { bill_number: billNumber, amount: parsed.data.amount },
     actorId: user.id,
   });
   redirect("/admin/billing?success=bill-created");
@@ -562,6 +672,16 @@ export async function createSchoolTrial(formData: FormData) {
     redirect("/admin/trials?error=trial-create-failed");
   }
 
+  if (parsed.data.status === "active") {
+    const { error: activationError } = await supabase.from("schools")
+      .update({ is_active: true })
+      .eq("id", authorizedSchoolId);
+    if (activationError) {
+      console.error("School could not be enabled for its new trial.", activationError);
+      redirect("/admin/trials?error=trial-create-failed");
+    }
+  }
+
   await recordAuditEvent(supabase, {
     schoolId: authorizedSchoolId,
     action: "create",
@@ -589,6 +709,9 @@ export async function recordPlatformTransaction(formData: FormData) {
     notes: formData.get("notes") ?? "",
   });
   if (!parsed.success) redirect("/admin/payments?error=invalid-payment");
+  if (parsed.data.transactionDate > new Date().toISOString().slice(0, 10)) {
+    redirect("/admin/payments?error=invalid-payment");
+  }
 
   const { data: bill, error: billError } = await supabase.from("platform_bills")
     .select("id,school_id,bill_number,total_amount,paid_amount")
@@ -634,7 +757,9 @@ export async function activateSchoolLifecycle(formData: FormData) {
     schoolId: formData.get("schoolId"),
     planName: formData.get("planName") ?? "Starter",
     monthlyAmount: formData.get("monthlyAmount") ?? "0",
-    contractNumber: formData.get("contractNumber") ?? `CT-${Date.now()}`,
+    pricingModel: formData.get("pricingModel") ?? "monthly",
+    contractNumber: formData.get("contractNumber") ?? "",
+    endDate: formData.get("endDate") ?? "",
     trialId: formData.get("trialId") ?? undefined,
   });
 
@@ -655,46 +780,70 @@ export async function activateSchoolLifecycle(formData: FormData) {
     redirect("/dashboard?error=not-authorized");
   }
 
-  const { data: school } = await supabase.from("schools").select("id").eq("id", authorizedSchoolId).maybeSingle();
+  const { data: school, error: schoolLookupError } = await supabase.from("schools")
+    .select("id")
+    .eq("id", authorizedSchoolId)
+    .maybeSingle();
+  if (schoolLookupError) {
+    console.error("School could not be loaded for contract setup.", schoolLookupError);
+    redirect("/admin/schools?error=school-not-found");
+  }
   if (!school) {
     redirect("/admin/schools?error=school-not-found");
   }
 
-  const { error: schoolStatusError } = await supabase.from("schools").update({ is_active: true }).eq("id", authorizedSchoolId);
-  if (schoolStatusError) {
-    redirect("/admin/schools?error=school-activation-failed");
-  }
-
   const currentDate = new Date().toISOString().slice(0, 10);
-  const { data: contract } = await supabase.from("platform_contracts").upsert({
+  try {
+    getBillingPeriodEnd(currentDate, parsed.data.pricingModel, parsed.data.endDate || null);
+  } catch {
+    redirect("/admin/schools/" + authorizedSchoolId + "?error=invalid-lifecycle-activation");
+  }
+  if (parsed.data.pricingModel === "custom" && !parsed.data.endDate) {
+    redirect("/admin/schools/" + authorizedSchoolId + "?error=invalid-lifecycle-activation");
+  }
+  const { data: contract, error: contractError } = await supabase.from("platform_contracts").insert({
     school_id: authorizedSchoolId,
-    contract_number: parsed.data.contractNumber,
+    contract_number: parsed.data.contractNumber || "",
     plan_name: parsed.data.planName,
-    pricing_model: "monthly",
+    pricing_model: parsed.data.pricingModel,
     monthly_amount: parsed.data.monthlyAmount,
-    status: "active",
+    status: "draft",
     start_date: currentDate,
-    end_date: null,
+    end_date: parsed.data.endDate || null,
     renewal_date: null,
-    metadata: { source: "manual_activation", created_by: user.id },
-  }, { onConflict: "school_id,contract_number" }).select("id").maybeSingle();
+    metadata: { source: "contract_setup", created_by: user.id, ...(parsed.data.trialId ? { trial_id: parsed.data.trialId } : {}) },
+  }).select("id,contract_number").single();
 
-  if (!contract) {
+  if (contractError || !contract) {
+    console.error("Paid school contract could not be created.", contractError);
     redirect("/admin/schools/" + authorizedSchoolId + "?error=contract-activation-failed");
   }
 
-  if (parsed.data.trialId) {
-    const { error: trialError } = await supabase.from("school_trials").update({
-      status: "converted",
-      notes: "Converted to a live contract by the master admin.",
-    }).eq("id", parsed.data.trialId).eq("school_id", authorizedSchoolId);
-
-    if (trialError) {
-      redirect("/admin/schools/" + authorizedSchoolId + "?error=trial-conversion-failed");
-    }
+  const invoiceCreated = await createContractInvoice({
+    supabase,
+    contractId: contract.id,
+    schoolId: authorizedSchoolId,
+    planName: parsed.data.planName,
+    pricingModel: parsed.data.pricingModel,
+    monthlyAmount: parsed.data.monthlyAmount,
+    startDate: currentDate,
+    endDate: parsed.data.endDate || null,
+    createdBy: user.id,
+  });
+  if (!invoiceCreated) {
+    redirect("/admin/schools/" + authorizedSchoolId + "?error=contract-invoice-create-failed");
   }
 
-  redirect("/admin/schools/" + authorizedSchoolId + "?success=lifecycle-activated");
+  await recordAuditEvent(supabase, {
+    schoolId: authorizedSchoolId,
+    action: "create",
+    entityType: "platform_contracts",
+    entityId: contract.id,
+    metadata: { contract_number: contract.contract_number, plan_name: parsed.data.planName, pricing_model: parsed.data.pricingModel, monthly_amount: parsed.data.monthlyAmount, status: "draft", initial_invoice_scheduled: true },
+    actorId: user.id,
+  });
+
+  redirect("/admin/schools/" + authorizedSchoolId + "?success=contract-invoice-scheduled");
 }
 
 export async function pauseSchoolContract(formData: FormData) {
@@ -709,16 +858,23 @@ export async function pauseSchoolContract(formData: FormData) {
     redirect("/admin/contracts?error=invalid-contract-action");
   }
 
-  const { error } = await supabase.from("platform_contracts").update({
+  const { data: contract, error } = await supabase.from("platform_contracts").update({
     status: "paused",
-    renewal_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    metadata: { status_changed_by: user.id, change: "paused" },
-  }).eq("id", parsed.data.contractId);
+  }).eq("id", parsed.data.contractId).select("id,school_id,contract_number").maybeSingle();
 
-  if (error) {
+  if (error || !contract) {
+    console.error("Contract could not be paused.", error);
     redirect("/admin/contracts?error=contract-pause-failed");
   }
 
+  await recordAuditEvent(supabase, {
+    schoolId: contract.school_id,
+    action: "update",
+    entityType: "platform_contracts",
+    entityId: contract.id,
+    metadata: { contract_number: contract.contract_number, status: "paused" },
+    actorId: user.id,
+  });
   redirect("/admin/contracts?success=contract-paused");
 }
 
@@ -734,16 +890,23 @@ export async function cancelSchoolContract(formData: FormData) {
     redirect("/admin/contracts?error=invalid-contract-action");
   }
 
-  const { error } = await supabase.from("platform_contracts").update({
+  const { data: contract, error } = await supabase.from("platform_contracts").update({
     status: "cancelled",
-    end_date: new Date().toISOString().slice(0, 10),
-    metadata: { status_changed_by: user.id, change: "cancelled" },
-  }).eq("id", parsed.data.contractId);
+  }).eq("id", parsed.data.contractId).select("id,school_id,contract_number").maybeSingle();
 
-  if (error) {
+  if (error || !contract) {
+    console.error("Contract could not be cancelled.", error);
     redirect("/admin/contracts?error=contract-cancel-failed");
   }
 
+  await recordAuditEvent(supabase, {
+    schoolId: contract.school_id,
+    action: "update",
+    entityType: "platform_contracts",
+    entityId: contract.id,
+    metadata: { contract_number: contract.contract_number, status: "cancelled" },
+    actorId: user.id,
+  });
   redirect("/admin/contracts?success=contract-cancelled");
 }
 
@@ -759,34 +922,170 @@ export async function renewSchoolContract(formData: FormData) {
     redirect("/admin/contracts?error=invalid-contract-action");
   }
 
-  const requestedRenewalDate = String(formData.get("renewalDate") ?? "").trim();
   const today = new Date().toISOString().slice(0, 10);
-  const fallbackRenewalDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const renewalDate = requestedRenewalDate || fallbackRenewalDate;
-  const renewalWindow = resolveContractRenewalWindow({
-    status: "active",
-    renewalDate,
-    asOf: today,
-  });
+  const { data: contract, error } = await supabase.from("platform_contracts")
+    .select("id,school_id,contract_number,plan_name,pricing_model,monthly_amount,status,start_date,end_date,subscription_valid_until,renewal_date")
+    .eq("id", parsed.data.contractId)
+    .maybeSingle();
 
-  const { error } = await supabase.from("platform_contracts").update({
-    status: "active",
-    start_date: today,
-    renewal_date: renewalDate,
-    end_date: renewalWindow.isRenewalDue || renewalWindow.warns ? null : null,
-    metadata: {
-      status_changed_by: user.id,
-      change: "renewed",
-      renewal_window: renewalWindow,
-      renewal_date: renewalDate,
-    },
-  }).eq("id", parsed.data.contractId);
-
-  if (error) {
-    redirect("/admin/contracts?error=contract-renewal-failed");
+  if (error || !contract) {
+    console.error("Contract could not be loaded to schedule its invoice.", error);
+    redirect("/admin/contracts?error=contract-not-found");
   }
 
-  redirect("/admin/contracts?success=contract-renewed");
+  if (contract.status === "cancelled" || !["monthly", "annual", "custom"].includes(contract.pricing_model)) {
+    redirect("/admin/contracts?error=invalid-contract-action");
+  }
+  const { data: openBills, error: openBillsError } = await supabase.from("platform_bills")
+    .select("id,total_amount,paid_amount")
+    .eq("contract_id", contract.id);
+  if (openBillsError) {
+    console.error("Existing contract invoices could not be checked before renewal.", openBillsError);
+    redirect("/admin/contracts?error=contract-invoice-create-failed");
+  }
+  if ((openBills ?? []).some((bill) => Number(bill.paid_amount ?? 0) < Number(bill.total_amount))) {
+    redirect("/admin/contracts?success=contract-invoice-scheduled");
+  }
+
+  const paidThrough = contract.subscription_valid_until ?? contract.renewal_date;
+  const periodStart = paidThrough && paidThrough >= today
+    ? addDaysToDate(paidThrough, 1)
+    : today;
+  const renewalEndDate = String(formData.get("renewalEndDate") ?? "").trim();
+  if (contract.pricing_model !== "custom" && contract.end_date && periodStart > contract.end_date) {
+    redirect("/admin/contracts?error=contract-term-expired");
+  }
+  if (contract.pricing_model === "custom") {
+    try {
+      getBillingPeriodEnd(periodStart, "custom", renewalEndDate);
+    } catch {
+      redirect("/admin/contracts?error=invalid-contract-action");
+    }
+    if (!renewalEndDate) redirect("/admin/contracts?error=invalid-contract-action");
+  }
+  const invoiceCreated = await createContractInvoice({
+    supabase,
+    contractId: contract.id,
+    schoolId: contract.school_id,
+    planName: contract.plan_name,
+    pricingModel: contract.pricing_model as PlatformBillingModel,
+    monthlyAmount: Number(contract.monthly_amount),
+    startDate: periodStart,
+    endDate: contract.pricing_model === "custom" ? renewalEndDate : contract.end_date,
+    dueDate: addDaysToDate(periodStart, -7),
+    createdBy: user.id,
+  });
+  if (!invoiceCreated) redirect("/admin/contracts?error=contract-invoice-create-failed");
+
+  await recordAuditEvent(supabase, {
+    schoolId: contract.school_id,
+    action: "create",
+    entityType: "platform_contracts",
+    entityId: contract.id,
+    metadata: { contract_number: contract.contract_number, action: "renewal_invoice_scheduled", billing_period_start: periodStart },
+    actorId: user.id,
+  });
+  redirect("/admin/contracts?success=contract-invoice-scheduled");
+}
+
+export async function updateSchoolTrial(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
+    redirect("/dashboard?error=not-authorized");
+  }
+
+  const parsed = trialLifecycleSchema.safeParse({
+    trialId: formData.get("trialId"),
+    status: formData.get("status"),
+    endsOn: formData.get("endsOn"),
+    seats: formData.get("seats"),
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsed.success) redirect("/admin/trials?error=invalid-trial-action");
+
+  const { data: trial, error: lookupError } = await supabase.from("school_trials")
+    .select("id,school_id,trial_name,status")
+    .eq("id", parsed.data.trialId)
+    .maybeSingle();
+  if (lookupError || !trial) {
+    console.error("School trial could not be loaded for update.", lookupError);
+    redirect("/admin/trials?error=trial-not-found");
+  }
+
+  const { error } = await supabase.from("school_trials").update({
+    status: parsed.data.status,
+    ends_on: parsed.data.endsOn,
+    seats: parsed.data.seats,
+    notes: parsed.data.notes || null,
+  }).eq("id", trial.id).eq("school_id", trial.school_id);
+  if (error) {
+    console.error("School trial update failed.", error);
+    redirect("/admin/trials?error=trial-update-failed");
+  }
+
+  if (parsed.data.status === "active") {
+    const { error: schoolActivationError } = await supabase.from("schools")
+      .update({ is_active: true })
+      .eq("id", trial.school_id);
+    if (schoolActivationError) {
+      console.error("School could not be enabled for its active trial.", schoolActivationError);
+      redirect("/admin/trials?error=trial-update-failed");
+    }
+  }
+
+  await recordAuditEvent(supabase, {
+    schoolId: trial.school_id,
+    action: "update",
+    entityType: "school_trials",
+    entityId: trial.id,
+    metadata: { trial_name: trial.trial_name, status: parsed.data.status, ends_on: parsed.data.endsOn, seats: parsed.data.seats },
+    actorId: user.id,
+  });
+  redirect("/admin/trials?success=trial-updated");
+}
+
+export async function setMasterAdminSchoolStatus(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || !(await isMasterAdminUser(supabase, user.id))) {
+    redirect("/dashboard?error=not-authorized");
+  }
+
+  const parsed = z.object({
+    schoolId: postgresUuidSchema,
+    isActive: z.enum(["true", "false"]),
+  }).safeParse({
+    schoolId: formData.get("schoolId"),
+    isActive: formData.get("isActive"),
+  });
+  if (!parsed.success) redirect("/admin/schools?error=invalid-school-status");
+
+  const { data: school, error: lookupError } = await supabase.from("schools")
+    .select("id,name,is_active")
+    .eq("id", parsed.data.schoolId)
+    .maybeSingle();
+  if (lookupError || !school) {
+    console.error("School could not be loaded for status update.", lookupError);
+    redirect("/admin/schools?error=school-not-found");
+  }
+
+  const isActive = parsed.data.isActive === "true";
+  const { error } = await supabase.from("schools").update({ is_active: isActive }).eq("id", school.id);
+  if (error) {
+    console.error("Master Admin school status update failed.", error);
+    redirect("/admin/schools?error=school-status-update-failed");
+  }
+
+  await recordAuditEvent(supabase, {
+    schoolId: school.id,
+    action: "update",
+    entityType: "schools",
+    entityId: school.id,
+    metadata: { field: "is_active", previous: school.is_active, current: isActive, school_name: school.name },
+    actorId: user.id,
+  });
+  redirect(`/admin/schools?success=${isActive ? "school-activated" : "school-deactivated"}`);
 }
 
 export async function reconcilePlatformBills(formData: FormData) {

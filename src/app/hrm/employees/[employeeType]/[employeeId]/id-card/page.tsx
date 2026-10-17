@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 
-import { PrintAction } from "@/components/print/print-action";
+import { IdCardPrintControls } from "@/components/print/id-card-print-controls";
 import { getEmployeePhotoUrl, isEmployeeIdCardReady } from "@/components/hrm/employee-verification-panel";
 import { requireHrmContext } from "@/lib/hrm/context";
 import { getSchoolDocumentIdentity } from "@/lib/print/school-document";
@@ -76,7 +76,7 @@ export default async function EmployeeIdCardPage({
   return <main className="student-id-card-page employee-id-card-page">
     <div className="student-id-card-toolbar no-print">
       <Link href="/hrm/candidates">Back to candidates</Link>
-      <PrintAction label="Print both sides / Save PDF" />
+      <IdCardPrintControls />
     </div>
     <div className="employee-id-card-sides">
     <article className="student-id-card employee-id-card employee-id-card--side employee-id-card--front" aria-label={`${fullName} employee ID card front`}>

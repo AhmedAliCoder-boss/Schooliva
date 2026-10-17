@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const optionalText = z.string().trim().max(2000).optional().default("");
-const postgresUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+export const postgresUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
 export const jobOpeningSchema = z.object({
   title: z.string().trim().min(2).max(160),
@@ -45,7 +45,7 @@ export const interviewStatusSchema = z.object({
 });
 
 export const employeeExitRequestSchema = z.object({
-  employeeId: z.string().uuid(),
+  employeeId: postgresUuid,
   employeeType: z.enum(["teacher", "staff"]),
   actionType: z.enum(["resignation", "termination", "warning"]),
   terminationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -93,5 +93,6 @@ export type HrmFormState = {
   success?: string;
   employeeUserId?: string;
   employeeCode?: string;
+  generatedDocumentId?: string;
   fieldErrors?: Record<string, string[]>;
 };

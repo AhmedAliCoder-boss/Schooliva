@@ -8,8 +8,9 @@ import { getActiveSchoolContext } from "@/lib/admin/school-context";
 import { getSchoolBrandingForSchool } from "@/lib/school-branding";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/format/currency";
-import { isSchoolAdminRole } from "@/lib/auth/roles";
+import { normalizeSchoolRoleSlug, SCHOOL_DASHBOARD_ROLE_SLUGS } from "@/lib/auth/roles";
 import { SchoolivaShell } from "@/components/schooliva-shell";
+import { getAuthorizedNavigationHrefs } from "@/lib/navigation/role-navigation";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -33,34 +34,60 @@ export default async function DashboardPage() {
   const school = schoolRecord && typeof schoolRecord === "object" && "name" in schoolRecord ? schoolRecord as { name?: string | null } : null;
   const roleRecord = Array.isArray(membership?.roles) ? membership.roles[0] : membership?.roles;
   const role = roleRecord && typeof roleRecord === "object" && "name" in roleRecord ? roleRecord as { name?: string | null } : null;
-  const canSeeUserAccounts = Boolean(activeSchoolContext.schoolId) && (memberships ?? []).some((row) => {
-    if (String(row.school_id) !== activeSchoolContext.schoolId) return false;
-    const assignedRoles = Array.isArray(row.roles) ? row.roles : [row.roles];
-    return assignedRoles.some((assignedRole) =>
-      assignedRole && typeof assignedRole === "object" && "slug" in assignedRole
-      && isSchoolAdminRole(String((assignedRole as { slug?: string | null }).slug ?? ""))
-    );
-  });
   const schoolOptions = (memberships ?? []).map((row) => {
     const record = Array.isArray(row.schools) ? row.schools[0] : row.schools;
     const name = record && typeof record === "object" && "name" in record ? String((record as { name?: string | null }).name ?? "School") : "School";
     return { id: String(row.school_id), name };
   });
   const schoolId = activeSchoolContext.schoolId;
-  const { data: summary } = schoolId ? await supabase.rpc("dashboard_summary", { target_school_id: schoolId }) : { data: null };
-  const { data: trendData } = schoolId ? await supabase.rpc("dashboard_trends", { target_school_id: schoolId }) : { data: null };
+  const { data: summary, error: summaryError } = schoolId ? await supabase.rpc("dashboard_summary", { target_school_id: schoolId }) : { data: null, error: null };
+  const [{ data: trendData, error: trendError }, { data: roleMetrics, error: roleMetricsError }, { data: permissionRows, error: permissionError }] = schoolId
+    ? await Promise.all([
+        supabase.rpc("dashboard_trends", { target_school_id: schoolId }),
+        supabase.rpc("dashboard_role_metrics", { target_school_id: schoolId }),
+        supabase.rpc("get_effective_permissions", { target_school_id: schoolId }),
+      ])
+    : [{ data: null, error: null }, { data: null, error: null }, { data: null, error: null }];
+  const dashboardError = summaryError ?? trendError ?? roleMetricsError;
+  if (dashboardError) {
+    console.error("Role dashboard data could not be loaded.", dashboardError);
+    throw new Error("Dashboard data could not be loaded.");
+  }
+  if (permissionError) {
+    console.error("Dashboard navigation permissions could not be loaded.", permissionError);
+    throw new Error("Dashboard access could not be verified.");
+  }
+  const effectivePermissions = (permissionRows ?? []).map((permission: { resource: string; action: string }) => `${permission.resource}:${permission.action}`);
+  const visibleNavHrefs = schoolId ? getAuthorizedNavigationHrefs(effectivePermissions) : ["/profile"];
   const brandingProfile = schoolId ? await getSchoolBrandingForSchool(supabase, schoolId) : null;
   const brandingTheme = brandingProfile?.theme;
-  const metrics = (summary ?? {}) as Record<string, unknown>;
+  const metrics = { ...((summary ?? {}) as Record<string, unknown>), ...((roleMetrics ?? {}) as Record<string, unknown>) };
   const trends = (trendData ?? {}) as { attendance?: Array<{ date: string; value: number }>; payments?: Array<{ date: string; value: number }>; schools_count?: number };
-  const roleSlug = activeSchoolContext.isMasterAdmin ? "super_admin" : String(metrics.role ?? role?.name ?? "member").toLowerCase().replaceAll(" ", "_");
+  const rawRoleSlug = activeSchoolContext.isMasterAdmin ? "super_admin" : String(metrics.role ?? role?.name ?? "member").toLowerCase().replaceAll(" ", "_");
+  const roleSlug = normalizeSchoolRoleSlug(rawRoleSlug) ?? "member";
+  const supportedRole = (SCHOOL_DASHBOARD_ROLE_SLUGS as readonly string[]).includes(rawRoleSlug) || (SCHOOL_DASHBOARD_ROLE_SLUGS as readonly string[]).includes(roleSlug);
   const metricCards = roleSlug === "accountant" ? [
     ["Collection today", metrics.collection_today ?? 0, "finance"],
     ["Outstanding fees", formatCurrency(metrics.outstanding_fees), "finance"],
     ["Overdue invoices", metrics.overdue_invoices ?? 0, "finance"],
     ["Payments today", metrics.payments_today ?? 0, "finance"],
+  ] : roleSlug === "librarian" ? [
+    ["Catalog items", metrics.library_titles ?? 0, "library"],
+    ["Available copies", metrics.available_copies ?? 0, "library"],
+    ["Issued copies", metrics.issued_copies ?? 0, "library"],
+    ["Overdue items", metrics.overdue_books ?? 0, "library"],
+  ] : roleSlug === "transport_manager" ? [
+    ["Active vehicles", metrics.active_vehicles ?? 0, "transport"],
+    ["Active routes", metrics.active_routes ?? 0, "transport"],
+    ["Stops", metrics.transport_stops ?? 0, "transport"],
+    ["Student assignments", metrics.transport_assignments ?? 0, "transport"],
+  ] : roleSlug === "hr_manager" ? [
+    ["Active employees", metrics.active_employees ?? 0, "hrm/employees"],
+    ["Employees on leave", metrics.employees_on_leave ?? 0, "leave"],
+    ["Pending leave requests", metrics.pending_leave_requests ?? 0, "leave"],
+    ["Total employees", metrics.total_employees ?? 0, "hrm/employees"],
   ] : roleSlug === "teacher" ? [
-    ["Assigned classes", metrics.assigned_classes ?? 0, "teachers"],
+    ["Assigned classes", metrics.assigned_classes ?? 0, "curriculum"],
     ["Today timetable", metrics.today_timetable ?? 0, "timetable"],
     ["Open assignments", metrics.assignments ?? 0, "assignments"],
     ["Upcoming exams", metrics.upcoming_exams ?? 0, "exams"],
@@ -73,7 +100,7 @@ export default async function DashboardPage() {
     ["Today timetable", metrics.today_timetable ?? 0, "timetable"],
     ["Open assignments", metrics.open_assignments ?? 0, "assignments"],
     ["Notifications", metrics.unread_notifications ?? 0, "notifications"],
-  ] : [
+  ] : ["super_admin", "school_admin", "principal"].includes(roleSlug) ? [
     ["Students", metrics.students ?? 0, "students"],
     ["Teachers", metrics.teachers ?? 0, "teachers"],
     ["Staff", metrics.staff ?? 0, "staff"],
@@ -82,7 +109,7 @@ export default async function DashboardPage() {
     ["Fee collection today", formatCurrency(metrics.fee_collection_today), "finance"],
     ["Outstanding fees", formatCurrency(metrics.outstanding_fees), "finance"],
     ["Unread notifications", metrics.unread_notifications ?? 0, "notifications"],
-  ];
+  ] : [];
   const firstName = profile?.full_name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "there";
   const roleLabel = roleSlug.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const quickActions: Array<{ label: string; detail: string; href: string }> =
@@ -106,17 +133,37 @@ export default async function DashboardPage() {
       { label: "Assignments", detail: "Review work to complete", href: "/assignments" },
       { label: "Exam schedule", detail: "Review upcoming exams", href: "/exams" },
       { label: "Results", detail: "View academic results", href: "/results" },
+    ] : roleSlug === "librarian" ? [
+      { label: "Book catalog", detail: "Review books and copy availability", href: "/library" },
+      { label: "Issue / return", detail: "Manage circulation activity", href: "/library" },
+      { label: "Overdue items", detail: "Review books requiring follow-up", href: "/library" },
+      { label: "Library reports", detail: "Open authorized library reporting", href: "/reports" },
+    ] : roleSlug === "transport_manager" ? [
+      { label: "Vehicles", detail: "Review active school vehicles", href: "/transport" },
+      { label: "Routes and stops", detail: "Manage transport routes", href: "/transport" },
+      { label: "Student assignments", detail: "Review route assignments", href: "/transport" },
+      { label: "Transport reports", detail: "Open authorized transport reporting", href: "/reports" },
+    ] : roleSlug === "hr_manager" ? [
+      { label: "Employee records", detail: "Review school staff", href: "/hrm/employees" },
+      { label: "Leave requests", detail: "Review pending leave", href: "/leave" },
+      { label: "Staff attendance", detail: "Open attendance records", href: "/people-attendance" },
+      { label: "HR reports", detail: "Open authorized HR reporting", href: "/reports" },
     ] : roleSlug === "super_admin" ? [
       { label: "School directory", detail: "Manage school workspaces", href: "/admin/schools" },
       { label: "Create school", detail: "Set up a new workspace", href: "/admin/schools/new" },
       { label: "User accounts", detail: "Review platform accounts", href: "/admin/accounts" },
       { label: "Audit log", detail: "Review recent changes", href: "/audit" },
-    ] : [
+    ] : ["school_admin", "principal"].includes(roleSlug) ? [
       { label: "Take attendance", detail: "Open today's class register", href: "/attendance" },
       { label: "Admit student", detail: "Start an admission before creating a permanent student ID", href: "/admissions/new" },
       { label: "Create invoice", detail: "Prepare a fee invoice", href: "/finance/invoices" },
       { label: "Manage payroll", detail: "Open staff salary runs", href: "/payroll" },
-    ];
+    ] : [];
+  const canNavigateTo = (href: string) =>
+    visibleNavHrefs.some((navHref) => href === navHref || href.startsWith(`${navHref}/`)) ||
+    (roleSlug === "super_admin" && href.startsWith("/admin/"));
+  const visibleMetricCards = metricCards.filter(([, , href]) => canNavigateTo(`/${href}`));
+  const visibleQuickActions = quickActions.filter((item) => canNavigateTo(item.href));
   const attendance = trends.attendance ?? [];
   const payments = trends.payments ?? [];
   const maxPayment = Math.max(...payments.map((item) => Number(item.value)), 1);
@@ -141,13 +188,13 @@ export default async function DashboardPage() {
       userRole={roleLabel}
       userAvatarUrl={avatar?.signedUrl ?? null}
       unreadNotifications={Number(metrics.unread_notifications ?? 0)}
-      showUserAccounts={canSeeUserAccounts}
+      visibleNavHrefs={visibleNavHrefs}
       schoolContext={activeSchoolContext.isMasterAdmin ? selectedSchool?.name ?? activeSchoolContext.schoolName ?? "Selected school" : undefined}
       schoolContextAction={activeSchoolContext.isMasterAdmin ? <form action={exitSchoolWorkspace}><button className="sign-out" type="submit">Return to platform</button></form> : undefined}
       brandingTheme={brandingTheme}
       schoolLogoUrl={brandingProfile?.logoUrl ?? null}
     >
-      <section className="dashboard-welcome"><div><p className="dashboard-kicker">{selectedSchool?.name ?? school?.name ?? "School workspace"} / {roleLabel}</p><LiveGreeting firstName={firstName} /><p>One clear view of the people, learning, and operations moving through your school today.</p></div><div className="dashboard-actions"><Link href="/reports" className="dashboard-action dashboard-action--primary">View reports <span>-&gt;</span></Link><Link href="/search" className="dashboard-action">Search records <span>&#9906;</span></Link></div></section>
+      <section className="dashboard-welcome"><div><p className="dashboard-kicker">{selectedSchool?.name ?? school?.name ?? "School workspace"} / {roleLabel}</p><LiveGreeting firstName={firstName} /><p>One clear view of the work and information available to your role today.</p></div><div className="dashboard-actions">{visibleNavHrefs.includes("/reports") && <Link href="/reports" className="dashboard-action dashboard-action--primary">View reports <span>-&gt;</span></Link>}</div></section>
       {schoolId && (selectedSchool || (membership && school)) ? <section className="dashboard-workspace-bar"><div><span>Active workspace</span><strong>{selectedSchool?.name ?? school?.name}</strong><small>{roleLabel} access / Updated just now</small></div><span className="dashboard-status"><i /> Systems operational</span></section> : <section className="empty-state"><h2>Access is pending.</h2><p>Your account is active, but it has not been connected to a school yet. Ask an administrator to add your school membership.</p></section>}
       {!activeSchoolContext.isMasterAdmin && schoolOptions.length > 1 && (
         <section className="dashboard-panel" style={{ marginTop: 16 }}>
@@ -163,14 +210,15 @@ export default async function DashboardPage() {
         </section>
       )}
       {schoolId && <>
-        <section className="dashboard-metrics" aria-label="Dashboard summary">{metricCards.map(([label, value, href]) => <Link className="dashboard-metric-card" href={`/${href}`} key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong><small>View details <em>-&gt;</em></small></Link>)}</section>
-        <section className="dashboard-quick-actions" aria-labelledby="dashboard-quick-actions-title">
+        {supportedRole && visibleMetricCards.length > 0 && <section className="dashboard-metrics" aria-label="Dashboard summary">{visibleMetricCards.map(([label, value, href]) => <Link className="dashboard-metric-card" href={`/${href}`} key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong><small>View details <em>-&gt;</em></small></Link>)}</section>}
+        {membership && !supportedRole && <section className="empty-state"><h2>Dashboard role is not configured.</h2><p>Your account has a school assignment, but its role is not supported by this dashboard. Ask your school administrator to review your role assignment.</p></section>}
+        {visibleQuickActions.length > 0 && <section className="dashboard-quick-actions" aria-labelledby="dashboard-quick-actions-title">
           <div className="dashboard-card-heading">
             <div><span className="dashboard-panel-kicker">Shortcuts</span><h2 id="dashboard-quick-actions-title">Quick actions</h2></div>
             <span className="dashboard-quick-actions__hint">Common tasks for your role</span>
           </div>
           <div className="dashboard-quick-actions__grid">
-            {quickActions.map((item, index) => (
+            {visibleQuickActions.map((item, index) => (
               <Link className="dashboard-quick-action" href={item.href} key={item.href}>
                 <span className="dashboard-quick-action__index">{String(index + 1).padStart(2, "0")}</span>
                 <span className="dashboard-quick-action__copy"><strong>{item.label}</strong><small>{item.detail}</small></span>
@@ -178,13 +226,13 @@ export default async function DashboardPage() {
               </Link>
             ))}
           </div>
-        </section>
-        <section className="dashboard-content-grid">
-          <article className="dashboard-panel dashboard-panel--attendance"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Attendance overview</span><h2>Daily presence, last 7 days</h2></div><Link href="/attendance">Open attendance -&gt;</Link></div><div className="dashboard-chart"><div className="dashboard-chart__scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><svg viewBox="0 0 620 190" role="img" aria-label="Attendance trend for the last seven days"><path className="dashboard-chart__grid" d="M0 10H620M0 48H620M0 86H620M0 124H620M0 180H620" />{attendance.length > 1 && <><polyline className="dashboard-chart__area" points={`0,190 ${attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} 620,190`} /><polyline className="dashboard-chart__line" points={attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} />{attendance.map((item, index) => { const [x, y] = pointFor(Number(item.value), index, attendance).split(","); return <circle className="dashboard-chart__point" cx={x} cy={y} r="4" key={item.date} />; })}</>}</svg><div className="dashboard-chart__labels">{attendance.map((item) => <span key={item.date}>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(item.date))}</span>)}</div></div><div className="dashboard-insight"><span className="dashboard-insight__signal">&#8599;</span><span>30-day attendance is <strong>{String(metrics.attendance_percentage ?? 0)}%</strong>.</span></div></article>
-          <article className="dashboard-panel"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Finance</span><h2>Fee payments</h2></div><Link href="/finance">Open finance -&gt;</Link></div>{payments.length ? <div className="dashboard-bars">{payments.map((item) => <div key={item.date}><span>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(item.date))}</span><b style={{ width: `${Math.max(2, (Number(item.value) / maxPayment) * 100)}%` }} /><strong>{formatCurrency(item.value)}</strong></div>)}</div> : <p className="dashboard-muted">No payment trend data is available yet.</p>}</article>
-          <article className="dashboard-panel"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Workspace pulse</span><h2>Scale at a glance</h2></div>{roleSlug === "super_admin" && <Link href="/setup">Manage -&gt;</Link>}</div><div className="dashboard-scale"><div><span>Attendance health</span><strong>{String(metrics.attendance_percentage ?? 0)}%</strong></div><div className="dashboard-scale__track"><span style={{ width: `${Math.min(100, Number(metrics.attendance_percentage ?? 0))}%` }} /></div></div><div className="dashboard-scale"><div><span>Active students</span><strong>{String(metrics.students ?? metrics.children ?? 0)}</strong></div><div className="dashboard-scale__track dashboard-scale__track--cyan"><span style={{ width: `${Math.min(100, Number(metrics.students ?? 0))}%` }} /></div></div>{roleSlug === "super_admin" && <div className="dashboard-pulse"><span>Schools added</span><strong>{String(trends.schools_count ?? 0)}</strong><small>Across your admin workspace</small></div>}</article>
-        </section>
-        <section className="dashboard-panel dashboard-activity"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Recent activity</span><h2>Changes across this school</h2></div><Link href="/audit">Open audit log -&gt;</Link></div>{activity.length ? <ul>{activity.map((item, index) => <li key={`${item.created_at}-${index}`}><span className="dashboard-activity__icon">&#8226;</span><div><strong>{item.action ?? "Updated"} {item.entity_type ?? "record"}</strong><small>{item.created_at ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at)) : "Recently"}</small></div></li>)}</ul> : <p className="dashboard-muted">No recent activity has been recorded yet.</p>}</section>
+        </section>}
+        {(attendance.length > 0 || payments.length > 0 || ["super_admin", "school_admin", "principal"].includes(roleSlug)) && <section className="dashboard-content-grid">
+          <article className="dashboard-panel dashboard-panel--attendance" hidden={!attendance.length}><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Attendance overview</span><h2>Daily presence, last 7 days</h2></div><Link href="/attendance">Open attendance -&gt;</Link></div><div className="dashboard-chart"><div className="dashboard-chart__scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div><svg viewBox="0 0 620 190" role="img" aria-label="Attendance trend for the last seven days"><path className="dashboard-chart__grid" d="M0 10H620M0 48H620M0 86H620M0 124H620M0 180H620" />{attendance.length > 1 && <><polyline className="dashboard-chart__area" points={`0,190 ${attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} 620,190`} /><polyline className="dashboard-chart__line" points={attendance.map((item, index) => pointFor(Number(item.value), index, attendance)).join(" ")} />{attendance.map((item, index) => { const [x, y] = pointFor(Number(item.value), index, attendance).split(","); return <circle className="dashboard-chart__point" cx={x} cy={y} r="4" key={item.date} />; })}</>}</svg><div className="dashboard-chart__labels">{attendance.map((item) => <span key={item.date}>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(item.date))}</span>)}</div></div><div className="dashboard-insight"><span className="dashboard-insight__signal">&#8599;</span><span>30-day attendance is <strong>{String(metrics.attendance_percentage ?? 0)}%</strong>.</span></div></article>
+          <article className="dashboard-panel" hidden={!payments.length}><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Finance</span><h2>Fee payments</h2></div><Link href="/finance">Open finance -&gt;</Link></div><div className="dashboard-bars">{payments.map((item) => <div key={item.date}><span>{new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(item.date))}</span><b style={{ width: `${Math.max(2, (Number(item.value) / maxPayment) * 100)}%` }} /><strong>{formatCurrency(item.value)}</strong></div>)}</div></article>
+          <article className="dashboard-panel" hidden={!["super_admin", "school_admin", "principal"].includes(roleSlug)}><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Workspace pulse</span><h2>Scale at a glance</h2></div>{roleSlug === "super_admin" && <Link href="/setup">Manage -&gt;</Link>}</div><div className="dashboard-scale"><div><span>Attendance health</span><strong>{String(metrics.attendance_percentage ?? 0)}%</strong></div><div className="dashboard-scale__track"><span style={{ width: `${Math.min(100, Number(metrics.attendance_percentage ?? 0))}%` }} /></div></div><div className="dashboard-scale"><div><span>Active students</span><strong>{String(metrics.students ?? 0)}</strong></div><div className="dashboard-scale__track dashboard-scale__track--cyan"><span style={{ width: `${Math.min(100, Number(metrics.students ?? 0))}%` }} /></div></div>{roleSlug === "super_admin" && <div className="dashboard-pulse"><span>Schools added</span><strong>{String(trends.schools_count ?? 0)}</strong><small>Across your admin workspace</small></div>}</article>
+        </section>}
+        {["super_admin", "school_admin", "principal"].includes(roleSlug) && <section className="dashboard-panel dashboard-activity"><div className="dashboard-card-heading"><div><span className="dashboard-panel-kicker">Recent activity</span><h2>Changes across this school</h2></div>{visibleNavHrefs.includes("/audit") && <Link href="/audit">Open audit log -&gt;</Link>}</div>{activity.length ? <ul>{activity.map((item, index) => <li key={`${item.created_at}-${index}`}><span className="dashboard-activity__icon">&#8226;</span><div><strong>{item.action ?? "Updated"} {item.entity_type ?? "record"}</strong><small>{item.created_at ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at)) : "Recently"}</small></div></li>)}</ul> : <p className="dashboard-muted">No recent activity has been recorded yet.</p>}</section>}
         <footer className="dashboard-footer"><span>Signed in as <strong>{user.email}</strong></span><span>Last sign in <strong>{lastSignIn}</strong></span><span>Workspace access is permission scoped</span></footer>
       </>}
     </SchoolivaShell>

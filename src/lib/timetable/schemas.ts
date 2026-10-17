@@ -3,8 +3,8 @@ import { z } from "zod";
 const postgresUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const postgresUuid = z.string().regex(postgresUuidPattern);
 const requiredPostgresUuid = (label: string) => z.string()
-  .min(1, `${label} select karein.`)
-  .regex(postgresUuidPattern, `${label} select karein.`);
+  .min(1, `Select ${label.toLowerCase()}.`)
+  .regex(postgresUuidPattern, `Select a valid ${label.toLowerCase()}.`);
 
 export const weeklyTimetableSelectionSchema = z.object({
   sessionId: requiredPostgresUuid("Academic session"),

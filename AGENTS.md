@@ -10,8 +10,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Schooliva project status
 
-- Current phase: Phase 25 — Responsive PWA
-- Schooliva is implemented as a responsive, installable PWA with a safe offline shell and manifest-based app install support.
-- Sensitive financial and academic data is not cached offline; the service worker only caches public shell assets and static app resources.
+- Current phase: Phase 26 — Read-only offline viewing
+- Schooliva is a responsive, installable PWA with a public offline fallback and read-only caching for recently opened, authenticated pages.
+- Private page caches are scoped to the authenticated user and selected school, expire after 24 hours, and are cleared on sign-out or account/school scope changes.
+- Offline form submissions are blocked with a connection status message; Supabase writes remain online-only.
 - Mobile, tablet, and desktop layouts prioritize responsive navigation, accessible controls, and smaller touch targets.
-- Supabase data remains network-gated and permission-scoped; no private data is cached insecurely.
+- Supabase data remains permission-scoped; offline page snapshots are device-local and may contain private school information.

@@ -17,6 +17,7 @@ import {
   interviewSchema,
   interviewStatusSchema,
   jobOpeningSchema,
+  postgresUuid,
   type HrmFormState,
 } from "@/lib/hrm/schemas";
 
@@ -32,12 +33,71 @@ function exitActionLabel(actionType: "resignation" | "termination" | "warning") 
   return actionType === "resignation" ? "Resignation" : actionType === "termination" ? "Termination" : "Warning";
 }
 
+function isTransientStorageNetworkError(error: unknown) {
+  let current = error;
+  let isStorageUnknownError = false;
+  let isNetworkError = false;
+
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const detail = current as {
+      cause?: unknown;
+      code?: unknown;
+      message?: unknown;
+      name?: unknown;
+      originalError?: unknown;
+    };
+    if (depth === 0 && detail.name === "StorageUnknownError") isStorageUnknownError = true;
+    if (typeof detail.code === "string" && [
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "EAI_AGAIN",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+      "ECONNREFUSED",
+      "UND_ERR_SOCKET",
+    ].includes(detail.code)) {
+      isNetworkError = true;
+    }
+    if (typeof detail.message === "string" && /fetch failed|network error|socket hang up/i.test(detail.message)) {
+      isNetworkError = true;
+    }
+    current = detail.originalError ?? detail.cause;
+  }
+
+  return isStorageUnknownError && isNetworkError;
+}
+
+async function uploadEmployeePhoto(
+  adminClient: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  photoPath: string,
+  file: File,
+) {
+  let lastError: unknown;
+  const maxAttempts = 3;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const { error } = await adminClient.storage.from("profile-avatars").upload(photoPath, file, {
+      contentType: file.type,
+      upsert: true,
+    });
+    if (!error) return null;
+
+    lastError = error;
+    if (!isTransientStorageNetworkError(error) || attempt === maxAttempts - 1) break;
+
+    console.warn(`Employee photo upload hit a transient storage network error; retrying (${attempt + 1}/${maxAttempts - 1}).`);
+    await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+  }
+
+  return lastError;
+}
+
 export async function updateEmployeeVerification(
   _: HrmFormState | undefined,
   formData: FormData,
 ): Promise<HrmFormState> {
   const parsed = z.object({
-    employeeId: z.string().uuid(),
+    employeeId: postgresUuid,
     employeeType: z.enum(["teacher", "staff"]),
     documentType: z.enum(["profile_photo", "national_id", "qualification", "experience", "police_verification"]),
   }).safeParse(values(formData));
@@ -83,13 +143,12 @@ export async function updateEmployeeVerification(
     const adminClient = createSupabaseAdminClient();
     if (!adminClient) return { error: "Employee photo upload is not configured on the server." };
     const photoPath = `${employee.profile_id ?? employeeId}/${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await adminClient.storage.from("profile-avatars").upload(photoPath, file, {
-      contentType: file.type,
-      upsert: false,
-    });
+    const uploadError = await uploadEmployeePhoto(adminClient, photoPath, file);
     if (uploadError) {
       console.error("Could not upload employee photo.", uploadError);
-      return { error: "Employee photo could not be uploaded. Check the private profile photo bucket configuration." };
+      return { error: isTransientStorageNetworkError(uploadError)
+        ? "Employee photo upload was interrupted by a storage network problem. Please try again."
+        : "Employee photo could not be uploaded. Check the private profile photo bucket configuration." };
     }
 
     const employeeTable = employeeType === "teacher" ? "teachers" : "staff";
@@ -324,9 +383,9 @@ export async function reviewEmployeeVerificationDocument(
   formData: FormData,
 ): Promise<HrmFormState> {
   const parsed = z.object({
-    employeeId: z.string().uuid(),
+    employeeId: postgresUuid,
     employeeType: z.enum(["teacher", "staff"]),
-    documentId: z.string().uuid(),
+    documentId: postgresUuid,
     status: z.enum(["pending", "verified", "rejected"]),
   }).safeParse(values(formData));
   if (!parsed.success) return { error: "Choose a valid verification status." };
@@ -344,6 +403,164 @@ export async function reviewEmployeeVerificationDocument(
   revalidatePath(`/${parsed.data.employeeType === "teacher" ? "teachers" : "staff"}/${parsed.data.employeeId}`);
   revalidatePath("/hrm/employees");
   return { success: "Document verification status saved." };
+}
+
+export async function generateEmployeeDocument(
+  _: HrmFormState | undefined,
+  formData: FormData,
+): Promise<HrmFormState> {
+  const parsed = z.object({
+    employeeId: postgresUuid,
+    employeeType: z.enum(["teacher", "staff"]),
+    documentType: z.enum(["appointment", "experience", "employment_verification", "promotion", "relieving"]),
+    issuedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    effectiveDate: z.string().optional().default(""),
+    endDate: z.string().optional().default(""),
+    designation: z.string().trim().max(120).optional().default(""),
+    department: z.string().trim().max(120).optional().default(""),
+    employmentType: z.enum(["full_time", "part_time", "contract", "temporary"]).optional().default("full_time"),
+    probationPeriod: z.string().trim().max(80).optional().default(""),
+    salary: z.string().trim().max(80).optional().default(""),
+    reportingTo: z.string().trim().max(120).optional().default(""),
+    workingHours: z.string().trim().max(120).optional().default(""),
+    responsibilities: z.string().trim().max(1200).optional().default(""),
+    performance: z.string().trim().max(300).optional().default(""),
+    recipientName: z.string().trim().max(160).optional().default(""),
+    purpose: z.string().trim().max(300).optional().default(""),
+    previousDesignation: z.string().trim().max(120).optional().default(""),
+    reason: z.string().trim().max(800).optional().default(""),
+    clearanceStatus: z.string().trim().max(120).optional().default(""),
+    handoverDetails: z.string().trim().max(800).optional().default(""),
+    notes: z.string().trim().max(1500).optional().default(""),
+  }).safeParse(values(formData));
+  if (!parsed.success) return { error: "Check the employee document details and try again." };
+
+  const { supabase, schoolId, user } = await requireHrmContext("manage");
+  let employee: {
+    id: string;
+    employee_code: string;
+    first_name: string;
+    last_name: string;
+    joining_date: string | null;
+    designation: string | null;
+    department: string | null;
+    employment_status: string;
+  } | null = null;
+  let employeeError: unknown = null;
+
+  if (parsed.data.employeeType === "teacher") {
+    const result = await supabase.from("teachers")
+      .select("id,employee_code,first_name,last_name,specialization,joining_date,employment_status")
+      .eq("id", parsed.data.employeeId)
+      .eq("school_id", schoolId)
+      .maybeSingle();
+    employeeError = result.error;
+    if (result.data) {
+      employee = {
+        ...result.data,
+        designation: null,
+        department: null,
+      };
+    }
+  } else {
+    const result = await supabase.from("staff")
+      .select("id,employee_code,first_name,last_name,designation,department,joining_date,employment_status")
+      .eq("id", parsed.data.employeeId)
+      .eq("school_id", schoolId)
+      .maybeSingle();
+    employeeError = result.error;
+    employee = result.data;
+  }
+
+  if (employeeError) {
+    console.error("Employee details could not be loaded for document generation.", employeeError);
+    return { error: "Employee details could not be verified." };
+  }
+  if (!employee) return { error: "Choose an employee from this school." };
+
+  const { documentType, effectiveDate, endDate } = parsed.data;
+  const startDate = effectiveDate || employee.joining_date || "";
+  for (const [label, date] of [["effective / start date", startDate], ["end / last working date", endDate]] as const) {
+    if (!date) continue;
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      return { error: `Enter a valid ${label}.` };
+    }
+  }
+  if (["appointment", "promotion", "experience"].includes(documentType) && !startDate) {
+    return { error: "Enter the effective date for this letter." };
+  }
+  if (["experience", "relieving"].includes(documentType) && !endDate) {
+    return { error: documentType === "experience"
+      ? "Enter the last date of service for the experience letter."
+      : "Enter the employee's last working date." };
+  }
+  if (documentType === "promotion" && !parsed.data.previousDesignation) {
+    return { error: "Enter the employee's previous designation for the promotion letter." };
+  }
+  if (["appointment", "experience", "employment_verification", "promotion", "relieving"].includes(documentType)
+    && !parsed.data.designation) {
+    return { error: "Enter the employee's designation for this document." };
+  }
+  if (endDate && startDate && endDate < startDate) {
+    return { error: "The end date cannot be earlier than the start date." };
+  }
+  const issueDate = new Date(`${parsed.data.issuedOn}T00:00:00.000Z`);
+  if (Number.isNaN(issueDate.valueOf()) || issueDate.toISOString().slice(0, 10) !== parsed.data.issuedOn) {
+    return { error: "Enter a valid issue date." };
+  }
+
+  const employeeName = `${employee.first_name} ${employee.last_name}`.trim();
+  const designation = parsed.data.designation || employee.designation || (parsed.data.employeeType === "teacher" ? "Teacher" : "Employee");
+  const documentNumber = `EMP-${parsed.data.issuedOn.slice(0, 4)}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  const content = {
+    employeeName,
+    employeeCode: employee.employee_code,
+    employeeType: parsed.data.employeeType,
+    designation,
+    department: parsed.data.department || employee.department || "",
+    joiningDate: employee.joining_date ?? "",
+    employmentStatus: employee.employment_status,
+    effectiveDate: startDate,
+    endDate,
+    employmentType: documentType === "appointment" ? parsed.data.employmentType : "",
+    probationPeriod: documentType === "appointment" ? parsed.data.probationPeriod : "",
+    salary: ["appointment", "employment_verification", "promotion"].includes(documentType) ? parsed.data.salary : "",
+    reportingTo: ["appointment", "promotion"].includes(documentType) ? parsed.data.reportingTo : "",
+    workingHours: documentType === "appointment" ? parsed.data.workingHours : "",
+    responsibilities: documentType === "experience" ? parsed.data.responsibilities : "",
+    performance: documentType === "experience" ? parsed.data.performance : "",
+    recipientName: documentType === "employment_verification" ? parsed.data.recipientName : "",
+    purpose: documentType === "employment_verification" ? parsed.data.purpose : "",
+    previousDesignation: documentType === "promotion" ? parsed.data.previousDesignation : "",
+    reason: ["promotion", "relieving"].includes(documentType) ? parsed.data.reason : "",
+    clearanceStatus: documentType === "relieving" ? parsed.data.clearanceStatus : "",
+    handoverDetails: documentType === "relieving" ? parsed.data.handoverDetails : "",
+    notes: parsed.data.notes,
+  };
+
+  const { data: generatedDocument, error } = await supabase.from("hrm_employee_generated_documents").insert({
+    school_id: schoolId,
+    employee_type: parsed.data.employeeType,
+    employee_id: employee.id,
+    document_type: documentType,
+    document_number: documentNumber,
+    issued_on: parsed.data.issuedOn,
+    content,
+    created_by: user.id,
+  }).select("id").single();
+  if (error || !generatedDocument) {
+    console.error("Generated employee document could not be saved.", error);
+    return { error: error?.code === "23505"
+      ? "A document number conflict occurred. Please issue the document again."
+      : "The employee document could not be saved." };
+  }
+
+  revalidatePath("/documents");
+  return {
+    success: "Employee document issued and saved to the register.",
+    generatedDocumentId: generatedDocument.id,
+  };
 }
 
 export async function createJobOpening(_: HrmFormState | undefined, formData: FormData): Promise<HrmFormState> {

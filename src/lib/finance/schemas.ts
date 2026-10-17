@@ -16,7 +16,7 @@ export const feeStructureSchema = z.object({
 export const invoiceSchema = z.object({
   studentId: postgresUuid,
   academicSessionId: z.string().trim().max(100),
-  dueDate: z.string().trim().min(1, "Due date required hai."),
+  dueDate: z.string().trim().min(1, "Due date is required."),
   feeStructureIds: z.array(postgresUuid).min(1, "At least one fee item is required."),
   notes: z.string().trim().optional(),
 });
@@ -68,19 +68,19 @@ export const feeStructureDeleteSchema = z.object({
 
 export const paymentSchema = z.object({
   invoiceId: postgresUuid,
-  amount: z.coerce.number().positive("Payment amount positive hona chahiye."),
+  amount: z.coerce.number().positive("Payment amount must be greater than zero."),
   paymentMethod: z.enum(["cash", "bank_transfer", "card", "upi", "cheque", "other"]),
-  paymentDate: z.string().trim().min(1, "Payment date required hai."),
+  paymentDate: z.string().trim().min(1, "Payment date is required."),
   notes: z.string().trim().optional(),
 });
 
 export const expenseSchema = z.object({
   category: z.enum(["salary", "utilities", "supplies", "maintenance", "transport", "other"]),
-  description: z.string().trim().min(2, "Expense description required hai.").max(160),
+  description: z.string().trim().min(2, "Expense description is required.").max(160),
   vendor: z.string().trim().max(120).optional(),
-  amount: z.coerce.number().positive("Expense amount positive hona chahiye."),
+  amount: z.coerce.number().positive("Expense amount must be greater than zero."),
   paymentMethod: z.enum(["cash", "bank_transfer", "card", "upi", "cheque", "other"]),
-  expenseDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Valid expense date required hai."),
+  expenseDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "A valid expense date is required."),
   reference: z.string().trim().max(80).optional(),
   notes: z.string().trim().max(500).optional(),
 });

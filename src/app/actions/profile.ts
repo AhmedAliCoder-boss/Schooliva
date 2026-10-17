@@ -15,18 +15,18 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) return { error: "Session expire ho gayi. Dobara sign in karein." };
-  if (fullName.length < 2) return { error: "Full name kam se kam 2 characters ka hona chahiye." };
-  if (!/^[a-zA-Z0-9._-]{3,30}$/.test(username)) return { error: "Username 3-30 characters ka ho aur sirf letters, numbers, dot, dash ya underscore use kare." };
+  if (!user) return { error: "Your session has expired. Sign in again." };
+  if (fullName.length < 2) return { error: "Full name must be at least 2 characters." };
+  if (!/^[a-zA-Z0-9._-]{3,30}$/.test(username)) return { error: "Username must be 3-30 characters and may contain only letters, numbers, periods, hyphens, or underscores." };
 
   let uploadedPath: string | null = null;
   if (avatar instanceof File && avatar.size > 0) {
     const extensionByType: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
     const extension = extensionByType[avatar.type];
-    if (!extension) return { error: "Profile photo JPG, PNG ya WebP format mein honi chahiye." };
-    if (avatar.size > 5 * 1024 * 1024) return { error: "Profile photo 5 MB se chhoti honi chahiye." };
+    if (!extension) return { error: "Profile photo must be a JPG, PNG, or WebP file." };
+    if (avatar.size > 5 * 1024 * 1024) return { error: "Profile photo must be smaller than 5 MB." };
     if (!await isSupportedProfileImage(avatar)) {
-      return { error: "Profile photo file ka format verify nahi ho saka." };
+      return { error: "The profile photo file format could not be verified." };
     }
 
     uploadedPath = `${user.id}/${crypto.randomUUID()}.${extension}`;
@@ -36,9 +36,9 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
     });
     if (uploadError) {
       if (uploadError.message.toLowerCase().includes("bucket")) {
-        return { error: "Profile photo storage setup pending hai. Latest Supabase migration apply karein." };
+        return { error: "Profile photo storage is not configured. Apply the latest Supabase migration." };
       }
-      return { error: "Profile photo upload nahi ho saki. Dobara try karein." };
+      return { error: "The profile photo could not be uploaded. Try again." };
     }
   }
 
@@ -49,7 +49,7 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
     .maybeSingle();
   if (profileReadError) {
     if (uploadedPath) await supabase.storage.from("profile-avatars").remove([uploadedPath]);
-    return { error: "Profile read nahi ho saki. Dobara try karein." };
+    return { error: "The profile could not be loaded. Try again." };
   }
 
   const nameParts = fullName.split(/\s+/);
@@ -68,8 +68,8 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
       const { error: cleanupError } = await supabase.storage.from("profile-avatars").remove([uploadedPath]);
       if (cleanupError) return { error: "Profile update failed, and the uploaded photo could not be removed." };
     }
-    if (error.code === "23505") return { error: "Ye username pehle se kisi aur account ke paas hai." };
-    return { error: "Profile update nahi ho saki. Dobara try karein." };
+    if (error.code === "23505") return { error: "This username is already in use by another account." };
+    return { error: "The profile could not be updated. Try again." };
   }
 
   const previousPath = previousProfile?.avatar_path;
@@ -78,11 +78,11 @@ export async function updateProfile(_: ProfileFormState | undefined, formData: F
     if (removeError) {
       revalidatePath("/profile");
       revalidatePath("/dashboard");
-      return { error: "Profile update ho gayi, lekin purani photo cleanup nahi ho saki." };
+      return { error: "The profile was updated, but the previous photo could not be removed." };
     }
   }
 
   revalidatePath("/profile");
   revalidatePath("/dashboard");
-  return { success: "Profile update ho gayi." };
+  return { success: "Profile updated." };
 }

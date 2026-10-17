@@ -17,34 +17,34 @@ function schoolLocalDate() {
 
 export async function saveAuthor(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = authorSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Author form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Author form is invalid." };
   const { supabase, schoolId } = await requireLibraryContext("manage");
   const { error } = await supabase.from("library_authors").insert({ school_id: schoolId, name: parsed.data.name, bio: parsed.data.bio || null });
-  if (error) return { error: error.code === "23505" ? "Author already exists." : "Author add nahi ho saka." };
-  revalidatePath("/library"); return { success: "Author add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "Author already exists." : "Author could not be added." };
+  revalidatePath("/library"); return { success: "Author added." };
 }
 
 export async function saveCategory(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = categorySchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Category form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Category form is invalid." };
   const { supabase, schoolId } = await requireLibraryContext("manage");
   const { error } = await supabase.from("library_categories").insert({ school_id: schoolId, name: parsed.data.name });
-  if (error) return { error: error.code === "23505" ? "Category already exists." : "Category add nahi ho saka." };
-  revalidatePath("/library"); return { success: "Category add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "Category already exists." : "Category could not be added." };
+  revalidatePath("/library"); return { success: "Category added." };
 }
 
 export async function savePublisher(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = publisherSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Publisher form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Publisher form is invalid." };
   const { supabase, schoolId } = await requireLibraryContext("manage");
   const { error } = await supabase.from("library_publishers").insert({ school_id: schoolId, name: parsed.data.name });
-  if (error) return { error: error.code === "23505" ? "Publisher already exists." : "Publisher add nahi ho saka." };
-  revalidatePath("/library"); return { success: "Publisher add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "Publisher already exists." : "Publisher could not be added." };
+  revalidatePath("/library"); return { success: "Publisher added." };
 }
 
 export async function saveBook(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = bookSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Book form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Book form is invalid." };
   const { supabase, schoolId } = await requireLibraryContext("manage");
   const { error } = await supabase.from("library_books").insert({
     school_id: schoolId,
@@ -58,8 +58,8 @@ export async function saveBook(_: LibraryFormState | undefined, formData: FormDa
     summary: parsed.data.summary || null,
     rack_location: parsed.data.rackLocation || null,
   });
-  if (error) return { error: error.code === "23505" ? "ISBN already exists." : "Book add nahi ho saka." };
-  revalidatePath("/library"); return { success: "Book add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "ISBN already exists." : "Book could not be added." };
+  revalidatePath("/library"); return { success: "Book added." };
 }
 
 export async function addBookCopies(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
@@ -117,7 +117,7 @@ export async function addBookCopies(_: LibraryFormState | undefined, formData: F
 
 export async function saveMember(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = memberSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Member form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Member form is invalid." };
   const { supabase, schoolId } = await requireLibraryContext("manage");
   const studentId = parsed.data.memberType === "student" ? parsed.data.studentId : null;
   const teacherId = parsed.data.memberType === "teacher" ? parsed.data.teacherId : null;
@@ -138,13 +138,13 @@ export async function saveMember(_: LibraryFormState | undefined, formData: Form
     membership_number: parsed.data.membershipNumber,
     join_date: schoolLocalDate(),
   });
-  if (error) return { error: error.code === "23505" ? "Membership already exists." : "Library member create nahi ho saka." };
-  revalidatePath("/library"); return { success: "Library member add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "Membership already exists." : "Library member could not be created." };
+  revalidatePath("/library"); return { success: "Library member added." };
 }
 
 export async function issueBook(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
   const parsed = issueSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Issue form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Issue form is invalid." };
   if (parsed.data.dueDate < schoolLocalDate()) return { error: "Due date must be today or later." };
   const { supabase, schoolId } = await requireLibraryContext("issue");
   const [{ data: copy, error: copyError }, { data: member, error: memberError }] = await Promise.all([
@@ -166,9 +166,9 @@ export async function issueBook(_: LibraryFormState | undefined, formData: FormD
   });
   if (error) {
     console.error("Library book issue failed.", error);
-    return { error: error.message.toLowerCase().includes("available") ? "Selected copy currently unavailable." : "Book issue nahi ho saka." };
+    return { error: error.message.toLowerCase().includes("available") ? "Selected copy currently unavailable." : "Book could not be issued." };
   }
-  revalidatePath("/library"); return { success: "Book issue ho gaya." };
+  revalidatePath("/library"); return { success: "Book issued." };
 }
 
 export async function returnBook(_: LibraryFormState | undefined, formData: FormData): Promise<LibraryFormState> {
@@ -185,7 +185,7 @@ export async function returnBook(_: LibraryFormState | undefined, formData: Form
     .maybeSingle();
   if (error) {
     console.error("Library book return could not be saved.", error);
-    return { error: "Book return update nahi ho saka." };
+    return { error: "Book return could not be recorded." };
   }
   if (!data) return { error: "This loan was already returned or is no longer active. Refresh the page." };
   revalidatePath("/library");

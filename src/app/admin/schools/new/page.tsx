@@ -26,10 +26,10 @@ export default async function NewSchoolPage() {
             <label className="student-field">City<input name="city" /></label>
             <label className="student-field">State<input name="state" /></label>
             <label className="student-field">Country<input name="country" /></label>
-            <label className="student-field">Status<select name="status" defaultValue="active"><option value="active">Active</option><option value="inactive">Inactive</option><option value="suspended">Suspended</option></select></label>
+            <label className="student-field">Trial length (days)<input type="number" name="trialDays" min="1" max="90" defaultValue="30" required /></label>
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <button type="submit" className="dashboard-action dashboard-action--primary">Create School</button>
+            <button type="submit" className="dashboard-action dashboard-action--primary">Create School & Start Trial</button>
             <Link href="/admin/schools" className="dashboard-action">Back</Link>
           </div>
         </form>

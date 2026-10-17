@@ -11,8 +11,15 @@ describe("billing reconciliation", () => {
   });
 
   it("marks invoice as partially paid when a balance remains", () => {
-    expect(reconcileInvoiceStatus({ total: 2500, paidAmount: 1200, dueDate: "2026-10-02" })).toMatchObject({
+    expect(reconcileInvoiceStatus({ total: 2500, paidAmount: 1200, dueDate: "2099-10-02" })).toMatchObject({
       status: "partially_paid",
+      remainingAmount: 1300,
+    });
+  });
+
+  it("marks a partially paid invoice overdue when the remaining balance is past due", () => {
+    expect(reconcileInvoiceStatus({ total: 2500, paidAmount: 1200, dueDate: "2024-01-01" })).toMatchObject({
+      status: "overdue",
       remainingAmount: 1300,
     });
   });

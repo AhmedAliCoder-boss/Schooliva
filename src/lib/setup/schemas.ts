@@ -1,24 +1,24 @@
 import { z } from "zod";
 
-const requiredText = (label: string) => z.string().trim().min(1, `${label} required hai.`);
+const requiredText = (label: string) => z.string().trim().min(1, `${label} is required.`);
 const optionalText = z.string().trim().optional();
-const dateField = z.string().trim().min(1, "Date required hai.");
+const dateField = z.string().trim().min(1, "Date is required.");
 const supportedTimezones = new Set(["UTC", ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])]);
 const supportedCurrencies = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : []);
-const timezoneField = requiredText("Timezone").refine((value) => supportedTimezones.has(value), "Timezone list se valid option select karein.");
-const currencyField = z.string().trim().length(3, "Currency 3 letters ki honi chahiye.").toUpperCase().refine((value) => supportedCurrencies.has(value), "Currency list se valid option select karein.");
+const timezoneField = requiredText("Timezone").refine((value) => supportedTimezones.has(value), "Select a valid timezone from the list.");
+const currencyField = z.string().trim().length(3, "Currency must contain 3 letters.").toUpperCase().refine((value) => supportedCurrencies.has(value), "Select a valid currency from the list.");
 
 export const bootstrapSchoolSchema = z.object({
   name: requiredText("School name"),
   shortName: requiredText("Short name").max(30),
-  slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug lowercase letters, numbers aur hyphens mein hona chahiye."),
+  slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens in the slug."),
   code: requiredText("School code").max(20),
   schoolType: requiredText("School type"),
   campus: requiredText("Campus"),
   academicYear: requiredText("Academic year"),
   board: requiredText("Board"),
   medium: requiredText("Medium"),
-  email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
   phone: optionalText,
   website: optionalText,
   address: requiredText("Address"),
@@ -34,7 +34,7 @@ export const bootstrapSchoolSchema = z.object({
 export const schoolProfileSchema = z.object({
   name: requiredText("School name"),
   shortName: optionalText,
-  slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug lowercase letters, numbers aur hyphens mein hona chahiye."),
+  slug: requiredText("Slug").regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens in the slug."),
   code: requiredText("School code").max(20),
   schoolType: optionalText,
   campus: optionalText,
@@ -45,9 +45,9 @@ export const schoolProfileSchema = z.object({
     (value) => value === "" ? undefined : value,
     z.coerce.number().int().min(1800).max(new Date().getFullYear()).optional(),
   ),
-  email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
   phone: optionalText,
-  website: z.string().trim().url("Valid website URL enter karein.").optional().or(z.literal("")),
+  website: z.string().trim().url("Enter a valid website URL.").optional().or(z.literal("")),
   address: optionalText,
   city: optionalText,
   state: optionalText,

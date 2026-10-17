@@ -8,35 +8,35 @@ function values(formData: FormData) { return Object.fromEntries(formData.entries
 
 export async function saveLeaveType(_: LeaveFormState | undefined, formData: FormData): Promise<LeaveFormState> {
   const parsed = leaveTypeSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave type invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave type is invalid." };
   const { supabase, schoolId } = await requireLeaveContext("manage");
   const { error } = await supabase.from("leave_types").insert({ school_id: schoolId, name: parsed.data.name, description: parsed.data.description || null });
-  if (error) return { error: error.code === "23505" ? "Leave type already exists." : "Leave type create nahi hua." };
-  revalidatePath("/leave"); return { success: "Leave type add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "Leave type already exists." : "Leave type could not be created." };
+  revalidatePath("/leave"); return { success: "Leave type added." };
 }
 
 export async function createLeaveRequest(_: LeaveFormState | undefined, formData: FormData): Promise<LeaveFormState> {
   const parsed = leaveRequestSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave request invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave request is invalid." };
   const { supabase, schoolId, user } = await requireLeaveContext("manage");
   const fileValue = formData.get("document");
   const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null;
-  if (file && file.size > 5 * 1024 * 1024) return { error: "Document 5 MB se chhota hona chahiye." };
+  if (file && file.size > 5 * 1024 * 1024) return { error: "Document must be smaller than 5 MB." };
   if (file && !["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
-    return { error: "Sirf PDF, JPG, ya PNG document upload karein." };
+    return { error: "Upload a PDF, JPG, or PNG document." };
   }
   if (file) {
     const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
     const isPdf = file.type === "application/pdf" && new TextDecoder().decode(signature.slice(0, 5)) === "%PDF-";
     const isJpeg = file.type === "image/jpeg" && signature[0] === 0xff && signature[1] === 0xd8 && signature[2] === 0xff;
     const isPng = file.type === "image/png" && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte);
-    if (!isPdf && !isJpeg && !isPng) return { error: "Document file content selected type se match nahi karta." };
+    if (!isPdf && !isJpeg && !isPng) return { error: "Document content does not match the selected file type." };
   }
 
   const suppliedPath = parsed.data.attachmentPath || "";
-  if (file && suppliedPath) return { error: "Ya to document upload karein ya existing attachment path dein, dono nahi." };
+  if (file && suppliedPath) return { error: "Upload a document or provide an existing attachment path, not both." };
   if (suppliedPath && !suppliedPath.startsWith(`${schoolId}/${user.id}/`)) {
-    return { error: "Attachment path aapke school aur account ke private folder se match nahi karta." };
+    return { error: "The attachment path does not match your school's private folder for this account." };
   }
 
   const extensionByType: Record<string, string> = {
@@ -54,7 +54,7 @@ export async function createLeaveRequest(_: LeaveFormState | undefined, formData
     });
     if (uploadError) {
       console.error("Leave document could not be uploaded.", uploadError);
-      return { error: "Document upload nahi ho saka. Private leave-attachments bucket check karein." };
+      return { error: "Document could not be uploaded. Check the private leave-attachments bucket." };
     }
   }
 
@@ -76,8 +76,8 @@ export async function createLeaveRequest(_: LeaveFormState | undefined, formData
       : { error: null };
     if (cleanupError) console.error("Could not clean up the unlinked leave document.", cleanupError);
     return { error: cleanupError
-      ? "Leave request create nahi hui aur uploaded document remove nahi ho saka. Administrator se rabta karein."
-      : "Leave request create nahi hui." };
+      ? "Leave request could not be created, and the uploaded document could not be removed. Contact an administrator."
+      : "Leave request could not be created." };
   }
 
   if (storagePath) {
@@ -100,19 +100,19 @@ export async function createLeaveRequest(_: LeaveFormState | undefined, formData
       if (cleanupError) console.error("Could not clean up the unlinked leave document.", cleanupError);
       revalidatePath("/leave");
       return { success: updateError || cleanupError
-        ? "Leave request save ho gayi, lekin document link nahi hua. Administrator ko inform karein."
-        : "Leave request save ho gayi, lekin document link nahi ho saka. Aap request edit karke dobara attach kar sakte hain." };
+        ? "Leave request saved, but the document could not be linked. Notify an administrator."
+        : "Leave request saved, but the document could not be linked. Edit the request and attach it again." };
     }
   }
   revalidatePath("/leave");
-  return { success: `Leave request submit ho gayi${storagePath ? " aur document attach ho gaya." : "."}` };
+  return { success: `Leave request submitted${storagePath ? " and document attached." : "."}` };
 }
 
 export async function decideLeave(_: LeaveFormState | undefined, formData: FormData): Promise<LeaveFormState> {
   const parsed = leaveDecisionSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave decision invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Leave decision is invalid." };
   const { supabase, schoolId, user } = await requireLeaveContext("approve");
   const { error } = await supabase.from("leave_requests").update({ status: parsed.data.status, approver_profile_id: user.id, approved_at: new Date().toISOString(), approver_note: parsed.data.approverNote || null }).eq("id", parsed.data.leaveRequestId).eq("school_id", schoolId).eq("status", "requested");
-  if (error) return { error: "Leave decision save nahi hui." };
-  revalidatePath("/leave"); return { success: `Leave ${parsed.data.status} ho gayi.` };
+  if (error) return { error: "Leave decision could not be saved." };
+  revalidatePath("/leave"); return { success: `Leave request ${parsed.data.status}.` };
 }

@@ -2,15 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { activateSchoolLifecycle } from "@/app/actions/admin";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminShell, AdminWorkflowNotice } from "@/components/admin/admin-shell";
 import { SchoolBrandingEditor } from "@/components/admin/school-branding-editor";
 import { buildBrandingTheme, getSchoolBrandingForSchool } from "@/lib/school-branding";
 import { resolveSchoolLifecycle } from "@/lib/school-lifecycle";
 import { createClient } from "@/lib/supabase/server";
 import { isMasterAdminUser } from "@/lib/auth/roles";
 
-export default async function SchoolDetailPage({ params }: { params: Promise<{ schoolId: string }> }) {
-  const { schoolId } = await params;
+export default async function SchoolDetailPage({ params, searchParams }: { params: Promise<{ schoolId: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
+  const [{ schoolId }, query] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
@@ -82,6 +82,8 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
 
     return (
     <AdminShell title={school.name} description="A controlled view of this tenant. School-specific actions stay scoped to the selected school." breadcrumbs={[{ label: "Schools", href: "/admin/schools" }, { label: school.name }]} schoolContext={school.name} brandingTheme={brandingTheme}>
+        <AdminWorkflowNotice code={query.success} success />
+        <AdminWorkflowNotice code={query.error} />
       <section className="admin-toolbar"><div><span className="admin-toolbar__count">School management</span><span className="admin-toolbar__hint">{school.code} · {school.is_active ? "Active tenant" : "Inactive tenant"}</span></div><Link href={`/admin/schools/${schoolId}/dashboard`} className="admin-button admin-button--primary">Open School Dashboard →</Link></section>
       <section className="admin-kpi-grid">
         <article className="admin-kpi"><span>Total accounts</span><strong>{String((memberships ?? []).length)}</strong><small>Selected school</small></article>
@@ -175,10 +177,13 @@ export default async function SchoolDetailPage({ params }: { params: Promise<{ s
           <input type="hidden" name="trialId" value={activeTrial?.id ?? ""} />
           <div className="student-form-grid">
             <label className="student-field">Plan name<input name="planName" defaultValue={activeContract?.plan_name ?? "Starter"} required /></label>
-            <label className="student-field">Contract number<input name="contractNumber" defaultValue={activeContract?.contract_number ?? "CT-NEW"} required /></label>
-            <label className="student-field">Monthly amount<input type="number" name="monthlyAmount" step="0.01" min="0" defaultValue={Number(activeContract?.monthly_amount ?? 0)} /></label>
+            <label className="student-field">Contract reference (optional)<input name="contractNumber" placeholder="Auto-generated: SC-26-0001" /></label>
+            <label className="student-field">Billing cycle<select name="pricingModel" defaultValue="monthly"><option value="monthly">Monthly</option><option value="annual">Annual</option><option value="custom">Custom / manual</option></select></label>
+            <label className="student-field">Monthly equivalent<input type="number" name="monthlyAmount" step="0.01" min="0.01" defaultValue={Number(activeContract?.monthly_amount ?? 0) || ""} required /></label>
+            <label className="student-field">Contract end date<input type="date" name="endDate" /></label>
           </div>
-          <button type="submit" className="dashboard-action dashboard-action--primary">Activate school lifecycle</button>
+          <p className="account-form-note">This prepares the agreement and first bill. School access is enabled only after the full bill is recorded as paid. The trial remains available until its end date. Custom terms require an end date and are billed manually.</p>
+          <button type="submit" className="dashboard-action dashboard-action--primary">Prepare contract & first bill</button>
         </form>
       </section>
     </AdminShell>

@@ -103,7 +103,7 @@ export function NotificationCenter({
   return <div className="notification-center">
     {canManage && recipientRoles.length > 0 && <NotificationAnnouncementForm roles={recipientRoles} />}
     <section className="notification-inbox" aria-label="Your notifications">
-      <div className="notification-inbox__heading"><div><span>PERSONAL INBOX</span><h2>Recent updates <b>{unreadCount} unread</b></h2><p>Updates are private to your account and follow your active school workspace.</p></div>{unreadCount > 0 && <button type="button" onClick={() => void markAllRead()}>Mark all read</button>}</div>
+      <div className="notification-inbox__heading"><div><span>PERSONAL INBOX</span><h2>Recent updates <b>{unreadCount} unread</b></h2><p>Updates are private to your account and follow your active school workspace.</p></div>{unreadCount > 0 && <button type="button" data-offline-write onClick={() => void markAllRead()}>Mark all read</button>}</div>
       <div className="notification-inbox__toolbar">
         <div className="notification-inbox__filters" role="group" aria-label="Filter notifications">
           {(["all", "unread", "read"] as const).map((item) => <button type="button" key={item} className={filter === item ? "active" : ""} aria-pressed={filter === item} onClick={() => setFilter(item)}>{item === "all" ? `All (${notifications.length})` : item === "unread" ? `Unread (${unreadCount})` : "Read"}</button>)}
@@ -121,7 +121,7 @@ export function NotificationCenter({
               <h3>{item.title}</h3><p>{item.message}</p>
               {href && <Link className="notification-inbox-card__action" href={href}>Open related page <span aria-hidden="true">→</span></Link>}
             </div>
-            {!item.read_at && <button type="button" className="notification-inbox-card__read" onClick={() => void markRead(item.id)}>Mark read</button>}
+            {!item.read_at && <button type="button" className="notification-inbox-card__read" data-offline-write onClick={() => void markRead(item.id)}>Mark read</button>}
           </article>;
         }) : <div className="notification-inbox__empty"><span aria-hidden="true">✓</span><h3>{query ? "No matching updates" : filter === "unread" ? "You’re all caught up" : "No notifications yet"}</h3><p>{query ? "Try a different search." : "Important school updates will appear here and in your notification popup."}</p></div>}
       </div>

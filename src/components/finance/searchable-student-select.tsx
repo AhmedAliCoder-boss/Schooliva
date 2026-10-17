@@ -9,17 +9,20 @@ export function SearchableOptionSelect({
   label,
   name,
   placeholder,
+  defaultOptionId = "",
   onSelectionChange,
 }: {
   options: SearchableStudentOption[];
   label: string;
   name: string;
   placeholder: string;
+  defaultOptionId?: string;
   onSelectionChange?: (optionId: string) => void;
 }) {
   const listboxId = useId();
-  const [query, setQuery] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const defaultOption = options.find((option) => option.id === defaultOptionId);
+  const [query, setQuery] = useState(defaultOption?.name ?? "");
+  const [selectedStudentId, setSelectedStudentId] = useState(defaultOption?.id ?? "");
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);

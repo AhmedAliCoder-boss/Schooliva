@@ -36,7 +36,7 @@ function revalidateFinance() {
 
 export async function saveFeeStructure(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = feeStructureSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Fee structure form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Fee structure form is invalid." };
   const { supabase, schoolId } = await requireFinanceContext("manage");
   const classIds = parsed.data.classId === "all"
     ? (await supabase.from("classes").select("id").eq("school_id", schoolId))
@@ -66,13 +66,13 @@ export async function saveFeeStructure(_: FinanceFormState | undefined, formData
     .select("id");
   if (error) {
     console.error("Fee structure could not be saved for selected classes.", error);
-    return { error: error.code === "23505" ? "This class/session fee already exists." : "Fee structure save nahi ho saka." };
+    return { error: error.code === "23505" ? "This class/session fee already exists." : "Fee structure could not be saved." };
   }
   if (!data?.length) return { error: "This fee structure already exists for every selected class." };
   revalidateFinance();
   return { success: parsed.data.classId === "all"
     ? `Fee structure added to ${data.length} class${data.length === 1 ? "" : "es"}. Existing duplicate class fees were skipped.`
-    : "Fee structure add ho gaya." };
+    : "Fee structure added." };
 }
 
 export async function setFeeStructureActive(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
@@ -131,7 +131,7 @@ export async function deleteFeeStructure(_: FinanceFormState | undefined, formDa
 
 export async function saveInvoice(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = invoiceSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invoice form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invoice form is invalid." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
   const selected = parsed.data.feeStructureIds;
   const [{ data: sessions, error: sessionsError }, { data: structures, error: structuresError }] = await Promise.all([
@@ -192,7 +192,7 @@ export async function saveInvoice(_: FinanceFormState | undefined, formData: For
     notes: parsed.data.notes || null,
     created_by: user.id,
   }).select("id").single();
-  if (invoiceError || !invoice) return { error: "Invoice create nahi ho saka." };
+  if (invoiceError || !invoice) return { error: "Invoice could not be created." };
 
   const rows = structures.map((row) => ({
     school_id: schoolId,
@@ -207,15 +207,15 @@ export async function saveInvoice(_: FinanceFormState | undefined, formData: For
   if (itemError) {
     const { error: cleanupError } = await supabase.from("fee_invoices").delete().eq("id", invoice.id).eq("school_id", schoolId);
     if (cleanupError) return { error: "Invoice items could not be added; the incomplete invoice also could not be removed." };
-    return { error: "Invoice items create nahi hue." };
+    return { error: "Invoice items could not be created." };
   }
 
-  revalidateFinance(); return { success: "Invoice generate ho gaya." };
+  revalidateFinance(); return { success: "Invoice generated." };
 }
 
 export async function saveStudentInvoiceSchedule(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = studentInvoiceScheduleSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invoice schedule form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invoice schedule form is invalid." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
   const [{ data: student, error: studentError }, { data: session, error: sessionError }] = await Promise.all([
     supabase.from("students")
@@ -341,7 +341,7 @@ export async function setStudentInvoiceScheduleActive(_: FinanceFormState | unde
 
 export async function saveManagementInvoice(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = managementInvoiceSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Management invoice form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Management invoice form is invalid." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
   const { data: invoiceSequence, error: sequenceError } = await supabase.rpc("next_fee_invoice_number", {
     target_school_id: schoolId,
@@ -407,12 +407,12 @@ export async function saveManagementInvoice(_: FinanceFormState | undefined, for
 
 export async function savePayment(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = paymentSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payment form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Payment form is invalid." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage");
   const { data: invoice, error: invoiceError } = await supabase.from("fee_invoices").select("remaining_amount,status").eq("id", parsed.data.invoiceId).eq("school_id", schoolId).maybeSingle();
-  if (invoiceError) return { error: "Invoice balance verify nahi ho saka. Dobara try karein." };
-  if (!invoice || String(invoice.status) === "cancelled") return { error: "Selected invoice available nahi hai." };
-  if (parsed.data.amount > Number(invoice.remaining_amount)) return { error: "Payment amount invoice ke remaining balance se zyada nahi ho sakta." };
+  if (invoiceError) return { error: "Invoice balance could not be verified. Try again." };
+  if (!invoice || String(invoice.status) === "cancelled") return { error: "The selected invoice is unavailable." };
+  if (parsed.data.amount > Number(invoice.remaining_amount)) return { error: "Payment amount cannot exceed the invoice's remaining balance." };
   const reference = `PMT-${crypto.randomUUID()}`;
   const { error } = await supabase.from("fee_payments").insert({
     school_id: schoolId,
@@ -424,13 +424,13 @@ export async function savePayment(_: FinanceFormState | undefined, formData: For
     received_by: user.id,
     notes: parsed.data.notes || null,
   });
-  if (error) return { error: "Payment save nahi ho saka." };
-  revalidateFinance(); return { success: "Payment recorded ho gaya." };
+  if (error) return { error: "Payment could not be saved." };
+  revalidateFinance(); return { success: "Payment recorded." };
 }
 
 export async function saveExpense(_: FinanceFormState | undefined, formData: FormData): Promise<FinanceFormState> {
   const parsed = expenseSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Expense form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Expense form is invalid." };
   const { supabase, schoolId, user } = await requireFinanceContext("manage", "finance");
   const { error } = await supabase.from("school_expenses").insert({
     school_id: schoolId,
@@ -444,7 +444,7 @@ export async function saveExpense(_: FinanceFormState | undefined, formData: For
     notes: parsed.data.notes || null,
     created_by: user.id,
   });
-  if (error) return { error: "Expense record save nahi ho saka. Check karein ke finance migration apply hai." };
+  if (error) return { error: "Expense record could not be saved. Check that the finance migration has been applied." };
   revalidateFinance();
-  return { success: "Expense record save ho gaya." };
+  return { success: "Expense record saved." };
 }

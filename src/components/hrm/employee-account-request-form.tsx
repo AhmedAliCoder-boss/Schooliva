@@ -4,7 +4,6 @@ import { useActionState } from "react";
 
 import { requestHrmEmployeeAccount } from "@/app/actions/hrm";
 import { SubmitButton } from "@/components/auth/submit-button";
-import type { HrmFormState } from "@/lib/hrm/schemas";
 
 type RoleOption = { id: string; name: string; slug: string };
 

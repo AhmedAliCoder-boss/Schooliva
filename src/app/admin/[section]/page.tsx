@@ -1,62 +1,156 @@
-import { cancelSchoolContract, createPlatformBill, createPlatformContract, createSchoolTrial, pauseSchoolContract, recordPlatformTransaction, reconcilePlatformBills, renewSchoolContract } from "@/app/actions/admin";
-import { AdminShell, AdminUnavailable } from "@/components/admin/admin-shell";
+import { AdminShell, AdminUnavailable, AdminWorkflowNotice } from "@/components/admin/admin-shell";
+import { AdminContractsWorkspace } from "@/components/admin/admin-contracts-workspace";
+import { PlatformFinanceWorkspace, PlatformPaymentsWorkspace } from "@/components/admin/admin-finance-workspace";
+import { PlatformNotificationWorkspace } from "@/components/admin/platform-notification-workspace";
+import { AdminTrialsWorkspace } from "@/components/admin/admin-trials-workspace";
 import { filterCustomerSchoolRows } from "@/lib/admin/customer-schools";
 import { requireMasterAdmin } from "@/lib/admin/guard";
 import { formatCurrency } from "@/lib/format/currency";
-import { describeContractLifecycle } from "@/lib/billing-lifecycle";
 import { reconcileInvoiceStatus } from "@/lib/billing-reconciliation";
-import { resolveContractRenewalWindow } from "@/lib/contract-renewal";
 import { formatStorageBytes, getStorageQuotaStatus } from "@/lib/storage/quota";
 import { redirect } from "next/navigation";
 
 function relation<T>(value: unknown): T | null { return Array.isArray(value) ? (value[0] ?? null) as T : value as T | null; }
 
-async function BillingPage({ payments = false }: { payments?: boolean }) {
+function notificationErrorDetails(error: unknown) {
+  if (!error || typeof error !== "object") return { code: "", message: String(error ?? "") };
+  const value = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  return {
+    code: typeof value.code === "string" ? value.code : "",
+    message: typeof value.message === "string" ? value.message : "",
+    details: typeof value.details === "string" ? value.details : "",
+    hint: typeof value.hint === "string" ? value.hint : "",
+  };
+}
+
+function isNotificationCampaignSchemaMissing(error: unknown) {
+  const details = notificationErrorDetails(error);
+  const text = `${details.message} ${details.details} ${details.hint}`.toLowerCase();
+  const missingObject = [
+    "platform_notification_campaigns",
+    "get_platform_notification_audience",
+    "get_platform_notification_campaign_metrics",
+  ].some((objectName) => text.includes(objectName));
+  return missingObject && ["PGRST205", "PGRST202", "42P01", "42883"].includes(details.code);
+}
+
+function NotificationMigrationPending() {
+  return <AdminShell title="Notifications" description="The cross-school campaign workspace needs its database objects before it can load." breadcrumbs={[{ label: "Notifications" }]}>
+    <AdminUnavailable
+      title="Notification campaign migration is not applied"
+      detail="Apply supabase/migrations/20261017000100_master_admin_notification_campaigns.sql to the Supabase project used by this app, then reload this page. If it was already applied, confirm the app is connected to that same project and refresh the PostgREST schema cache."
+    />
+  </AdminShell>;
+}
+
+async function BillingPage({ payments = false, searchParams }: { payments?: boolean; searchParams: Promise<{ success?: string; error?: string }> }) {
+  const params = await searchParams;
   const { supabase } = await requireMasterAdmin();
   if (payments) {
-    const [{ data: paymentsData }, { data: billsData }, { data: schools }] = await Promise.all([
-      supabase.from("platform_transactions").select("id,transaction_reference,amount,payment_method,transaction_date,school_id,schools(name),platform_bills(bill_number)").order("transaction_date", { ascending: false }).limit(100),
-      supabase.from("platform_bills").select("id,bill_number,total_amount,paid_amount,school_id").order("due_date", { ascending: true }),
+    const [{ data: paymentsData, error: paymentsError }, { data: billsData, error: billsError }, { data: schools, error: schoolsError }] = await Promise.all([
+    supabase.from("platform_transactions").select("id,transaction_reference,amount,payment_method,transaction_date,school_id,bill_id").order("transaction_date", { ascending: false }).limit(100),
+      supabase.from("platform_bills").select("id,bill_number,description,total_amount,paid_amount,due_date,school_id").order("due_date", { ascending: true }).order("id", { ascending: true }).range(0, 499),
       supabase.from("schools").select("id,name").order("name", { ascending: true }),
     ]);
+    if (paymentsError || billsError || schoolsError) throw new Error("Unable to load Master Admin payment records.");
+    const billRows = [...(billsData ?? [])];
+    let nextOffset = 500;
+    let hasMore = (billsData?.length ?? 0) === 500;
+    while (hasMore) {
+      const { data, error } = await supabase.from("platform_bills")
+        .select("id,bill_number,description,total_amount,paid_amount,due_date,school_id")
+        .order("due_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(nextOffset, nextOffset + 499);
+      if (error) throw new Error("Unable to load all school bills for payment entry.");
+      billRows.push(...(data ?? []));
+      hasMore = (data?.length ?? 0) === 500;
+      nextOffset += 500;
+    }
     const customerSchoolIds = (schools ?? []).map((school) => school.id);
-    const filteredPayments = filterCustomerSchoolRows(paymentsData ?? [], customerSchoolIds);
-    const filteredOutstandingBills = filterCustomerSchoolRows(billsData ?? [], customerSchoolIds)
+    const filteredPayments = customerSchoolIds.length ? filterCustomerSchoolRows(paymentsData ?? [], customerSchoolIds) : [];
+    const schoolNames = new Map((schools ?? []).map((school) => [school.id, school.name]));
+    const billNumbers = new Map(billRows.map((bill) => [bill.id, bill.bill_number]));
+    const filteredOutstandingBills = (customerSchoolIds.length ? filterCustomerSchoolRows(billRows, customerSchoolIds) : [])
       .filter((bill) => Number(bill.total_amount) > Number(bill.paid_amount ?? 0));
+    const schoolOptions = (schools ?? []).map((school) => ({ id: school.id, name: school.name }));
+    const paymentRows = filteredPayments.map((payment) => ({
+      id: payment.id,
+      billId: payment.bill_id,
+      reference: payment.transaction_reference,
+      amount: Number(payment.amount ?? 0),
+      method: String(payment.payment_method ?? "other"),
+      date: String(payment.transaction_date ?? ""),
+      schoolId: String(payment.school_id ?? ""),
+      schoolName: schoolNames.get(payment.school_id) ?? "-",
+      billNumber: billNumbers.get(payment.bill_id) ?? "-",
+    }));
+    const outstandingBills = filteredOutstandingBills.map((bill) => ({
+      id: bill.id,
+      billNumber: bill.bill_number,
+      schoolId: bill.school_id,
+      schoolName: schools?.find((school) => school.id === bill.school_id)?.name ?? "School",
+      description: bill.description,
+      totalAmount: Number(bill.total_amount ?? 0),
+      paidAmount: Number(bill.paid_amount ?? 0),
+      balance: Math.max(Number(bill.total_amount ?? 0) - Number(bill.paid_amount ?? 0), 0),
+      dueDate: String(bill.due_date ?? ""),
+      status: reconcileInvoiceStatus({
+        total: Number(bill.total_amount ?? 0),
+        paidAmount: Number(bill.paid_amount ?? 0),
+        dueDate: String(bill.due_date ?? ""),
+      }).status,
+    }));
 
     return <AdminShell title="Payments" description="Platform transactions recorded against school bills." breadcrumbs={[{ label: "Payments" }]}>
-      <section className="admin-panel">
-        <div className="admin-panel__heading">
-          <div><p className="admin-kicker">Record transaction</p><h2>Register a school bill payment</h2></div>
-        </div>
-        <form action={recordPlatformTransaction} className="student-form" style={{ marginTop: 12 }}>
-          <div className="student-form-grid">
-            <label className="student-field">School bill<select name="billId" required>{filteredOutstandingBills.map((bill) => <option key={bill.id} value={bill.id}>{bill.bill_number} / {schools?.find((school) => school.id === bill.school_id)?.name ?? "School"}</option>)}</select></label>
-            <label className="student-field">Amount<input type="number" name="amount" min="0.01" step="0.01" required /></label>
-            <label className="student-field">Method<select name="paymentMethod" defaultValue="bank_transfer"><option value="cash">Cash</option><option value="bank_transfer">Bank Transfer</option><option value="card">Card</option><option value="upi">UPI</option><option value="cheque">Cheque</option><option value="other">Other</option></select></label>
-            <label className="student-field">Transaction date<input type="date" name="transactionDate" required /></label>
-            <label className="student-field student-field-wide">Notes<textarea name="notes" rows={3} /></label>
-          </div>
-          <button type="submit" className="dashboard-action dashboard-action--primary">Record transaction</button>
-        </form>
-      </section>
-      <section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Reference</th><th>School</th><th>Bill</th><th>Amount</th><th>Method</th><th>Transaction date</th></tr></thead><tbody>{filteredPayments.map((payment) => <tr key={payment.id}><td>{payment.transaction_reference}</td><td>{relation<{ name?: string }>(payment.schools)?.name ?? "-"}</td><td>{relation<{ bill_number?: string }>(payment.platform_bills)?.bill_number ?? "-"}</td><td>{formatCurrency(payment.amount)}</td><td>{String(payment.payment_method).replaceAll("_", " ")}</td><td>{String(payment.transaction_date)}</td></tr>)}{!filteredPayments.length && <tr><td colSpan={6}>No school platform transactions found.</td></tr>}</tbody></table></div></section>
+      <AdminWorkflowNotice code={params.success} success />
+      <AdminWorkflowNotice code={params.error} />
+      <PlatformPaymentsWorkspace payments={paymentRows} schools={schoolOptions} outstandingBills={outstandingBills} asOfDate={new Date().toISOString().slice(0, 10)} />
     </AdminShell>;
   }
-  const [{ data: billsData }, { data: schools }] = await Promise.all([
-    supabase.from("platform_bills").select("id,bill_number,description,total_amount,paid_amount,status,due_date,school_id,schools(name)").order("due_date", { ascending: true }).limit(100),
+  const [{ data: firstPage, error: firstPageError }, { data: schools, error: schoolsError }] = await Promise.all([
+    supabase.from("platform_bills").select("id,bill_number,description,total_amount,paid_amount,status,due_date,school_id,schools(name)").order("due_date", { ascending: true }).order("id", { ascending: true }).range(0, 499),
     supabase.from("schools").select("id,name").order("name", { ascending: true }),
   ]);
+  if (firstPageError || schoolsError) throw new Error("Unable to load Master Admin billing records.");
+  const billRows = [...(firstPage ?? [])];
+  let nextOffset = 500;
+  let hasMore = (firstPage?.length ?? 0) === 500;
+  while (hasMore) {
+    const { data, error } = await supabase.from("platform_bills")
+      .select("id,bill_number,description,total_amount,paid_amount,status,due_date,school_id,schools(name)")
+      .order("due_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(nextOffset, nextOffset + 499);
+    if (error) throw new Error("Unable to load all Master Admin billing records.");
+    billRows.push(...(data ?? []));
+    hasMore = (data?.length ?? 0) === 500;
+    nextOffset += 500;
+  }
   const customerSchoolIds = (schools ?? []).map((school) => school.id);
-  const rows = filterCustomerSchoolRows(billsData ?? [], customerSchoolIds);
-  const total = rows.reduce((sum, row) => sum + Number(row.total_amount ?? 0), 0);
-  const paid = rows.reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0);
-  const due = rows.reduce((sum, row) => sum + Math.max(Number(row.total_amount ?? 0) - Number(row.paid_amount ?? 0), 0), 0);
+  const rows = customerSchoolIds.length ? filterCustomerSchoolRows(billRows, customerSchoolIds) : [];
+  const schoolOptions = (schools ?? []).map((school) => ({ id: school.id, name: school.name }));
+  const financeBills = rows.map((row) => {
+    const amount = Number(row.total_amount ?? 0);
+    const paidAmount = Number(row.paid_amount ?? 0);
+    const balance = reconcileInvoiceStatus({ total: amount, paidAmount, dueDate: String(row.due_date ?? "") });
+    return {
+      id: row.id,
+      billNumber: row.bill_number,
+      schoolId: row.school_id,
+      schoolName: relation<{ name?: string }>(row.schools)?.name ?? "-",
+      description: row.description,
+      totalAmount: amount,
+      paidAmount,
+      remainingAmount: balance.remainingAmount,
+      dueDate: String(row.due_date ?? ""),
+      status: balance.status,
+    };
+  });
   return <AdminShell title="Billing" description="School bills and platform charges managed by Master Admin." breadcrumbs={[{ label: "Billing" }]}>
-    <section className="admin-kpi-grid"><article className="admin-kpi"><span>Total billed</span><strong>{formatCurrency(total)}</strong><small>Platform bills for schools</small></article><article className="admin-kpi"><span>Total paid</span><strong>{formatCurrency(paid)}</strong><small>Recorded school transactions</small></article><article className="admin-kpi"><span>Total outstanding</span><strong>{formatCurrency(due)}</strong><small>Remaining school bill balances</small></article><article className="admin-kpi"><span>Bills</span><strong>{rows.length}</strong><small>Platform finance records</small></article></section>
-    <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-kicker">New platform bill</p><h2>Bill a school</h2></div></div><form action={createPlatformBill} className="student-form" style={{ marginTop: 12 }}><div className="student-form-grid"><label className="student-field">School<select name="schoolId" required>{(schools ?? []).map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label><label className="student-field">Bill number<input name="billNumber" required /></label><label className="student-field">Description<input name="description" required /></label><label className="student-field">Amount<input type="number" name="amount" min="0.01" step="0.01" required /></label><label className="student-field">Due date<input type="date" name="dueDate" required /></label></div><button type="submit" className="dashboard-action dashboard-action--primary">Create bill</button></form></section>
-    <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-kicker">Billing control</p><h2>Reconcile bill status</h2></div></div><form action={reconcilePlatformBills}><button type="submit" className="dashboard-action dashboard-action--primary">Reconcile all bills</button></form></section>
-    <section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Bill</th><th>School</th><th>Description</th><th>Amount</th><th>Paid</th><th>Remaining</th><th>Due</th><th>Status</th></tr></thead><tbody>{rows.map((row) => { const nextState = reconcileInvoiceStatus({ total: Number(row.total_amount ?? 0), paidAmount: Number(row.paid_amount ?? 0), dueDate: String(row.due_date ?? "") }); return <tr key={row.id}><td>{row.bill_number}</td><td>{relation<{ name?: string }>(row.schools)?.name ?? "-"}</td><td>{row.description}</td><td>{formatCurrency(row.total_amount)}</td><td>{formatCurrency(row.paid_amount)}</td><td>{formatCurrency(nextState.remainingAmount)}</td><td>{String(row.due_date)}</td><td><span className="admin-badge admin-badge--neutral">{nextState.status.replaceAll("_", " ")}</span></td></tr>; })}{!rows.length && <tr><td colSpan={8}>No platform bills found for schools.</td></tr>}</tbody></table></div></section>
+    <AdminWorkflowNotice code={params.success} success />
+    <AdminWorkflowNotice code={params.error} />
+    <PlatformFinanceWorkspace bills={financeBills} schools={schoolOptions} asOfDate={new Date().toISOString().slice(0, 10)} />
   </AdminShell>;
 }
 
@@ -111,69 +205,144 @@ async function ActivityPage() {
   return <AdminShell title="Activity & Audit" description="Append-only platform activity visible to the Master Admin." breadcrumbs={[{ label: "Activity / Audit" }]}><section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Time</th><th>School</th><th>Actor</th><th>Action</th><th>Target</th><th>Metadata</th></tr></thead><tbody>{(data ?? []).map((row) => <tr key={row.id}><td>{new Date(String(row.created_at)).toLocaleString()}</td><td>{relation<{ name?: string }>(row.schools)?.name ?? "-"}</td><td>{relation<{ full_name?: string }>(row.profiles)?.full_name ?? String(row.actor_id ?? "System")}</td><td><span className="admin-badge admin-badge--neutral">{row.action}</span></td><td>{row.entity_type} · {String(row.entity_id ?? "-").slice(0, 10)}</td><td><small>{JSON.stringify(row.metadata)}</small></td></tr>)}{!(data ?? []).length && <tr><td colSpan={6}>No audit events found.</td></tr>}</tbody></table></div></section></AdminShell>;
 }
 
-async function ContractsPage() {
+async function ContractsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
+  const params = await searchParams;
   const { supabase } = await requireMasterAdmin();
-  const { data } = await supabase.from("platform_contracts").select("id,contract_number,plan_name,pricing_model,monthly_amount,status,start_date,end_date,renewal_date,school_id,schools(name)").order("created_at", { ascending: false }).limit(100);
-  const asOfDate = new Date().toISOString().slice(0, 10);
-  return <AdminShell title="Contracts" description="Platform contracts for each school tenant, tracked as first-class data rather than UI-only placeholders." breadcrumbs={[{ label: "Contracts" }]}>
-    <section className="admin-panel">
-      <div className="admin-panel__heading">
-        <div><p className="admin-kicker">Create contract</p><h2>Assign a plan to a school</h2></div>
-      </div>
-      <form action={createPlatformContract} className="student-form" style={{ marginTop: 12 }}>
-        <div className="student-form-grid">
-          <label className="student-field">School<select name="schoolId" required>{(await supabase.from("schools").select("id,name").order("name")).data?.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label>
-          <label className="student-field">Contract number<input name="contractNumber" required /></label>
-          <label className="student-field">Plan name<input name="planName" required /></label>
-          <label className="student-field">Status<select name="status" defaultValue="draft"><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option></select></label>
-          <label className="student-field">Billing model<select name="pricingModel" defaultValue="monthly"><option value="monthly">Monthly</option><option value="annual">Annual</option><option value="custom">Custom</option></select></label>
-          <label className="student-field">Monthly amount<input type="number" name="monthlyAmount" min="0" step="0.01" defaultValue="0" /></label>
-          <label className="student-field">Start date<input type="date" name="startDate" /></label>
-          <label className="student-field">End date<input type="date" name="endDate" /></label>
-          <label className="student-field">Renewal date<input type="date" name="renewalDate" /></label>
-        </div>
-        <button type="submit" className="dashboard-action dashboard-action--primary">Create Contract</button>
-      </form>
-    </section>
-    <section className="admin-panel admin-panel--flush">
-      <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Contract</th><th>School</th><th>Plan</th><th>Price</th><th>Status</th><th>Start</th><th>Renewal</th><th>Actions</th></tr></thead><tbody>{(data ?? []).map((row) => { const state = describeContractLifecycle(row.status, row.renewal_date); const renewalState = resolveContractRenewalWindow({ status: row.status, renewalDate: row.renewal_date, asOf: asOfDate }); return <tr key={row.id}><td>{row.contract_number}</td><td>{relation<{ name?: string }>(row.schools)?.name ?? "-"}</td><td>{row.plan_name}</td><td>{formatCurrency(row.monthly_amount)}</td><td><span className={`admin-badge ${state.isLive ? "admin-badge--positive" : "admin-badge--neutral"}`}>{state.label}{renewalState.isRenewalDue ? " · Due" : renewalState.warns ? " · Warning" : ""}</span></td><td>{String(row.start_date)}</td><td>{row.renewal_date ? String(row.renewal_date) : "—"}</td><td><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><form action={pauseSchoolContract}><input type="hidden" name="contractId" value={row.id} /><button type="submit" className="dashboard-action">Pause</button></form><form action={renewSchoolContract}><input type="hidden" name="contractId" value={row.id} /><input type="date" name="renewalDate" defaultValue={row.renewal_date ?? ""} /><button type="submit" className="dashboard-action dashboard-action--primary">Renew</button></form><form action={cancelSchoolContract}><input type="hidden" name="contractId" value={row.id} /><button type="submit" className="dashboard-action">Cancel</button></form></div></td></tr>; })}{!(data ?? []).length && <tr><td colSpan={8}>No contracts exist yet.</td></tr>}</tbody></table></div>
-    </section>
+  const [{ data, error }, { data: schoolRows, error: schoolsError }] = await Promise.all([
+    supabase.from("platform_contracts").select("id,contract_number,plan_name,pricing_model,monthly_amount,status,start_date,end_date,subscription_valid_until,renewal_date,school_id,schools(name)").order("created_at", { ascending: false }).limit(500),
+    supabase.from("schools").select("id,name").order("name"),
+  ]);
+  if (error || schoolsError) {
+    console.error("Master Admin contract portfolio could not be loaded.", { error, schoolsError });
+    throw new Error("Master Admin contract portfolio could not be loaded.");
+  }
+  const contracts = (data ?? []).map((row) => ({
+    id: row.id,
+    contractNumber: row.contract_number,
+    planName: row.plan_name,
+    pricingModel: row.pricing_model,
+    monthlyAmount: Number(row.monthly_amount ?? 0),
+    status: row.status,
+    startDate: String(row.start_date),
+    endDate: row.end_date ? String(row.end_date) : null,
+    subscriptionValidUntil: row.subscription_valid_until ? String(row.subscription_valid_until) : null,
+    renewalDate: row.renewal_date ? String(row.renewal_date) : null,
+    schoolId: row.school_id,
+    schoolName: relation<{ name?: string }>(row.schools)?.name ?? "School",
+  }));
+  return <AdminShell title="Contracts" description="Manage plans, renewals, revenue exposure, and agreements across Schooliva tenants. Schedule each renewal invoice when it is ready; payment no longer creates an extra bill automatically." breadcrumbs={[{ label: "Contracts" }]}>
+    <AdminWorkflowNotice code={params.success} success />
+    <AdminWorkflowNotice code={params.error} />
+    <AdminContractsWorkspace
+      contracts={contracts}
+      schools={(schoolRows ?? []).map((school) => ({ id: school.id, name: school.name }))}
+      asOfDate={new Date().toISOString().slice(0, 10)}
+    />
   </AdminShell>;
 }
 
-async function TrialsPage() {
+async function TrialsPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
+  const params = await searchParams;
   const { supabase } = await requireMasterAdmin();
-  const { data } = await supabase.from("school_trials").select("id,trial_name,school_id,status,starts_on,ends_on,seats,notes,schools(name)").order("starts_on", { ascending: false }).limit(100);
-
-  return <AdminShell title="Trials" description="School trial windows and onboarding seats are tracked as live operational data." breadcrumbs={[{ label: "Trials" }]}>
-    <section className="admin-panel">
-      <div className="admin-panel__heading">
-        <div><p className="admin-kicker">Start a trial</p><h2>Launch a pilot for a school</h2></div>
-      </div>
-      <form action={createSchoolTrial} className="student-form" style={{ marginTop: 12 }}>
-        <div className="student-form-grid">
-          <label className="student-field">School<select name="schoolId" required>{(await supabase.from("schools").select("id,name").order("name")).data?.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label>
-          <label className="student-field">Trial name<input name="trialName" required /></label>
-          <label className="student-field">Status<select name="status" defaultValue="pending"><option value="pending">Pending</option><option value="active">Active</option><option value="expired">Expired</option><option value="converted">Converted</option></select></label>
-          <label className="student-field">Starts on<input type="date" name="startsOn" /></label>
-          <label className="student-field">Ends on<input type="date" name="endsOn" required /></label>
-          <label className="student-field">Seats<input type="number" name="seats" min="1" defaultValue="25" /></label>
-          <label className="student-field student-field-wide">Notes<textarea name="notes" rows={3} /></label>
-        </div>
-        <button type="submit" className="dashboard-action dashboard-action--primary">Create Trial</button>
-      </form>
-    </section>
-    <section className="admin-panel admin-panel--flush">
-      <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Trial</th><th>School</th><th>Status</th><th>Starts</th><th>Ends</th><th>Seats</th></tr></thead><tbody>{(data ?? []).map((row) => <tr key={row.id}><td>{row.trial_name}</td><td>{relation<{ name?: string }>(row.schools)?.name ?? "-"}</td><td><span className="admin-badge admin-badge--neutral">{row.status}</span></td><td>{String(row.starts_on)}</td><td>{String(row.ends_on)}</td><td>{row.seats}</td></tr>)}{!(data ?? []).length && <tr><td colSpan={6}>No trial records exist yet.</td></tr>}</tbody></table></div>
-    </section>
+  const [{ data, error }, { data: schoolRows, error: schoolsError }] = await Promise.all([
+    supabase.from("school_trials").select("id,trial_name,school_id,status,starts_on,ends_on,seats,notes,schools(name)").order("starts_on", { ascending: false }).limit(500),
+    supabase.from("schools").select("id,name").order("name"),
+  ]);
+  if (error || schoolsError) {
+    console.error("Master Admin trial pipeline could not be loaded.", { error, schoolsError });
+    throw new Error("Master Admin trial pipeline could not be loaded.");
+  }
+  const trials = (data ?? []).map((row) => ({
+    id: row.id,
+    trialName: row.trial_name,
+    schoolId: row.school_id,
+    schoolName: relation<{ name?: string }>(row.schools)?.name ?? "School",
+    status: row.status,
+    startsOn: String(row.starts_on),
+    endsOn: String(row.ends_on),
+    seats: Number(row.seats),
+    notes: row.notes,
+  }));
+  return <AdminShell title="Trials" description="Manage onboarding pilots, monitor conversion readiness, and keep every school trial on track." breadcrumbs={[{ label: "Trials" }]}>
+    <AdminWorkflowNotice code={params.success} success />
+    <AdminWorkflowNotice code={params.error} />
+    <AdminTrialsWorkspace
+      trials={trials}
+      schools={(schoolRows ?? []).map((school) => ({ id: school.id, name: school.name }))}
+      asOfDate={new Date().toISOString().slice(0, 10)}
+    />
   </AdminShell>;
 }
 
 async function NotificationsPage() {
   const { supabase } = await requireMasterAdmin();
-  const { data } = await supabase.from("notifications").select("id,title,message,event_type,created_at,read_at,school_id,schools(name)").order("created_at", { ascending: false }).limit(100);
+  const [{ data: schoolRows, error: schoolsError }, { data: campaignRows, error: campaignsError }] = await Promise.all([
+    supabase.from("schools").select("id,name,is_active").order("name", { ascending: true }),
+    supabase.from("platform_notification_campaigns")
+      .select("id,title,message,role_slugs,school_ids,recipient_count,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
+  if (schoolsError || campaignsError) {
+    console.error("Master Admin notification workspace could not be loaded.", {
+      schools: notificationErrorDetails(schoolsError),
+      campaigns: notificationErrorDetails(campaignsError),
+    });
+    if (campaignsError && isNotificationCampaignSchemaMissing(campaignsError)) return <NotificationMigrationPending />;
+    throw new Error("Master Admin notification workspace could not be loaded.");
+  }
 
-  return <AdminShell title="Notifications" description="Platform and school notification records tracked in the system. Master Admin can see the operational feed without bypassing school scoping." breadcrumbs={[{ label: "Notifications" }]}><section className="admin-panel admin-panel--flush"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>School</th><th>Event</th><th>Title</th><th>Message</th><th>Created</th><th>Read</th></tr></thead><tbody>{(data ?? []).map((row) => <tr key={row.id}><td>{relation<{ name?: string }>(row.schools)?.name ?? "-"}</td><td>{row.event_type}</td><td>{row.title}</td><td>{row.message}</td><td>{new Date(String(row.created_at)).toLocaleString()}</td><td>{row.read_at ? new Date(String(row.read_at)).toLocaleString() : "Unread"}</td></tr>)}{!(data ?? []).length && <tr><td colSpan={6}>No notifications exist yet.</td></tr>}</tbody></table></div></section></AdminShell>;
+  const schools = (schoolRows ?? []).map((school) => ({
+    id: school.id,
+    name: school.name,
+    isActive: school.is_active,
+  }));
+  const activeSchoolIds = schools.filter((school) => school.isActive).map((school) => school.id);
+  const { data: audienceRows, error: audienceError } = activeSchoolIds.length
+    ? await supabase.rpc("get_platform_notification_audience", { target_school_ids: activeSchoolIds })
+    : { data: [], error: null };
+  if (audienceError) {
+    console.error("Master Admin notification audiences could not be loaded.", notificationErrorDetails(audienceError));
+    if (isNotificationCampaignSchemaMissing(audienceError)) return <NotificationMigrationPending />;
+    throw new Error("Master Admin notification audiences could not be loaded.");
+  }
+
+  const campaignIds = (campaignRows ?? []).map((campaign) => campaign.id);
+  const { data: metricRows, error: metricsError } = campaignIds.length
+    ? await supabase.rpc("get_platform_notification_campaign_metrics", { target_campaign_ids: campaignIds })
+    : { data: [], error: null };
+  if (metricsError) {
+    console.error("Master Admin campaign readership could not be loaded.", notificationErrorDetails(metricsError));
+    if (isNotificationCampaignSchemaMissing(metricsError)) return <NotificationMigrationPending />;
+    throw new Error("Master Admin campaign readership could not be loaded.");
+  }
+
+  const metrics = (metricRows ?? []) as Array<{ campaign_id: string; read_count: number | null }>;
+  const audience = (audienceRows ?? []) as Array<{ school_id: string; role_slug: string; role_name: string; recipient_count: number | null }>;
+  const metricsByCampaign = new Map(metrics.map((metric) => [
+    metric.campaign_id,
+    Number(metric.read_count ?? 0),
+  ]));
+  const campaigns = (campaignRows ?? []).map((campaign) => ({
+    id: campaign.id,
+    title: campaign.title,
+    message: campaign.message,
+    roleSlugs: campaign.role_slugs,
+    schoolIds: campaign.school_ids,
+    recipientCount: campaign.recipient_count,
+    createdAt: campaign.created_at,
+    readCount: metricsByCampaign.get(campaign.id) ?? 0,
+  }));
+  const audienceRoles = audience.map((row) => ({
+    schoolId: row.school_id,
+    slug: row.role_slug,
+    name: row.role_name,
+    recipientCount: Number(row.recipient_count ?? 0),
+  }));
+
+  return <AdminShell title="Notifications" description="Target, send, and monitor announcements across every Schooliva customer school." breadcrumbs={[{ label: "Notifications" }]}>
+    <PlatformNotificationWorkspace schools={schools} audienceRoles={audienceRoles} campaigns={campaigns} />
+  </AdminShell>;
 }
 
 async function SettingsPage() {
@@ -188,16 +357,19 @@ async function ReportsPage() {
   return <AdminShell title="Reports" description="Global reports assembled from current operational tables." breadcrumbs={[{ label: "Reports" }]}><section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-kicker">Available reports</p><h2>Platform snapshot</h2></div><a className="admin-button admin-button--primary" href="/reports/export">Export CSV</a></div><div className="admin-report-list"><div><span>Schools report</span><strong>{schools?.length ?? 0} schools · {schools?.filter((school) => school.is_active).length ?? 0} active</strong></div><div><span>Accounts report</span><strong>{new Set((roles ?? []).map((role) => role.user_id)).size} accounts</strong></div><div><span>Billing report</span><strong>{formatCurrency((invoices ?? []).reduce((sum, invoice) => sum + Number(invoice.total ?? 0), 0))} billed</strong></div><div><span>Payments report</span><strong>{formatCurrency((payments ?? []).reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0))} received</strong></div><div><span>People report</span><strong>{students?.length ?? 0} students · {teachers?.length ?? 0} teachers</strong></div></div></section></AdminShell>;
 }
 
-export default async function AdminSectionPage({ params }: { params: Promise<{ section: string }> }) {
+export default async function AdminSectionPage({ params, searchParams }: {
+  params: Promise<{ section: string }>;
+  searchParams: Promise<{ success?: string; error?: string }>;
+}) {
   const { section } = await params;
   if (section === "accounts") redirect("/admin/accounts");
-  if (section === "billing") return <BillingPage />;
-  if (section === "payments") return <BillingPage payments />;
+  if (section === "billing") return <BillingPage searchParams={searchParams} />;
+  if (section === "payments") return <BillingPage payments searchParams={searchParams} />;
   if (section === "storage") return <StoragePage />;
   if (section === "usage") return <UsagePage />;
   if (section === "activity") return <ActivityPage />;
-  if (section === "contracts") return <ContractsPage />;
-  if (section === "trials") return <TrialsPage />;
+  if (section === "contracts") return <ContractsPage searchParams={searchParams} />;
+  if (section === "trials") return <TrialsPage searchParams={searchParams} />;
   if (section === "notifications") return <NotificationsPage />;
   if (section === "settings") return <SettingsPage />;
   if (section === "reports") return <ReportsPage />;

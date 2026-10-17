@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { isAdminAccountManagerRole, isMasterAdminUser, isSchoolAdminRole, isSchoolStaffRole } from "../../src/lib/auth/roles";
+import { isAdminAccountManagerRole, isMasterAdminRole, isMasterAdminUser, isSchoolAdminRole, isSchoolStaffRole } from "../../src/lib/auth/roles";
 
 describe("account creation authorization", () => {
+  it("uses the database's super_admin slug as the sole Master Admin role", () => {
+    expect(isMasterAdminRole("super_admin")).toBe(true);
+    expect(isMasterAdminRole("master_admin")).toBe(false);
+  });
+
   it("allows admin role slugs to manage user creation", () => {
     expect(isAdminAccountManagerRole("super_admin")).toBe(true);
     expect(isAdminAccountManagerRole("school_admin")).toBe(true);

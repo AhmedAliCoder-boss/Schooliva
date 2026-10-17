@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 const optional = z.string().trim().optional();
-const required = (label: string) => z.string().trim().min(1, `${label} required hai.`);
+const required = (label: string) => z.string().trim().min(1, `${label} is required.`);
 
 export const studentSchema = z.object({
   firstName: required("First name"), middleName: optional, lastName: required("Last name"),
   dateOfBirth: optional, gender: z.enum(["female", "male", "non_binary", "undisclosed"]).optional().or(z.literal("")),
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]).optional().or(z.literal("")),
-  nationality: optional, phone: optional, email: z.string().trim().email("Valid email enter karein.").optional().or(z.literal("")), address: optional,
+  nationality: optional, phone: optional, email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")), address: optional,
   admissionDate: optional, emergencyContactName: optional, emergencyContactPhone: optional,
   emergencyContactRelationship: z.enum(["father", "mother", "guardian", "other"]).optional().or(z.literal("")),
   medicalNotes: optional, previousSchool: optional,

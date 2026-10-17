@@ -12,7 +12,7 @@ import { NavIcon, navGroups } from "@/components/schooliva-shell";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getActiveHref } from "@/lib/navigation/active-path";
 
-const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/reset-password", "/admin"];
+const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/admin"];
 
 function isExcluded(pathname: string) {
   return excludedPrefixes.some((prefix) => prefix === "/" ? pathname === "/" : pathname === prefix || pathname.startsWith(`${prefix}/`));

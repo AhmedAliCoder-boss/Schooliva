@@ -13,9 +13,20 @@
 
 ## Default roles
 
-The migration seeds global system roles for Master Admin, Super Admin, School
-Admin, Principal, Teacher, Accountant, HR Manager, Librarian, Transport Manager,
-Staff, Parent and Student. Roles can later be copied or customized per school.
+The database uses `super_admin` as the platform-wide Master Admin role. Other
+global system roles include School Admin, Principal, Teacher, Accountant, HR
+Manager, Librarian, Transport Manager, Staff, Parent and Student. The dashboard
+also recognizes `hr_staff_manager` as the HR Manager label alias.
+
+`role_permissions` is the default permission matrix. School-specific
+`role_permission_overrides` add or deny a permission for a role only within one
+school. An explicit denial overrides a default grant across all of a user's
+roles in that school; a grant takes effect only if the actor already has that
+permission. School administrators cannot change the platform permission
+defaults, assign platform-level permissions, change protected administrator
+roles, or change permissions for a role assigned to themselves. Deleting a
+role's overrides restores the defaults. Each change and reset is retained in
+`role_permission_override_audit`.
 
 ## Special access rules
 
@@ -27,6 +38,13 @@ Staff, Parent and Student. Roles can later be copied or customized per school.
   can further narrow their scope without changing the permission model.
 - Master Admin and the legacy Super Admin role are platform-wide and are
   recognized by the same database authorization helpers.
+- `get_effective_permissions(school_id)` exposes the permission set used by the
+  dashboard's centralized sidebar configuration. `has_permission` remains the
+  authorization primitive used by data policies and server-side module guards.
+- Dashboard summary RPCs return only aggregates authorized for the current
+  school role. Attendance and fee-payment trends are omitted unless the caller
+  has the matching view/manage permission. Librarian, Transport Manager and HR
+  Manager summaries use counts from their existing school-scoped tables.
 - Only platform admins can list every account or move accounts between schools.
   School account managers can manage memberships in their active school but
   cannot modify a platform admin or an account shared across schools.
@@ -80,6 +98,12 @@ HRM manager marks it verified or requests a replacement.
 server actions should use these helpers for route decisions. The
 `PermissionGate` component provides a server-rendered UI check, while database
 RLS remains authoritative.
+
+`/setup/permissions` lets an authorized school administrator review seeded
+defaults and effective permissions, add or revoke school-scoped overrides,
+restore a role's defaults, and inspect recent permission-change history.
+`/admin/roles` remains the separate platform-level permission-default
+administration surface.
 
 ## Testing
 

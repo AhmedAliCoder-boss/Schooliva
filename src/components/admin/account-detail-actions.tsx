@@ -6,7 +6,6 @@ import {
   changeManagedAccountEmail,
   changeManagedAccountStatus,
   moveManagedAccountSchool,
-  sendManagedAccountPasswordReset,
   setManagedAccountPassword,
   updateManagedAccount,
   uploadManagedAccountPhoto,
@@ -114,11 +113,6 @@ export function AccountDetailActions({
                 <input type="hidden" name="schoolId" value={selectedSchoolId} />
                 <label>New password<input name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></label>
                 <label>Confirm password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></label>
-              </AccountActionForm>
-              <AccountActionForm action={sendManagedAccountPasswordReset} className="account-edit-form" submitLabel="Send reset email" pendingLabel="Sending..." confirmMessage={`Send a Supabase Auth password reset email for ${fullName}?`}>
-                <input type="hidden" name="userId" value={userId} />
-                <input type="hidden" name="schoolId" value={selectedSchoolId} />
-                <p className="account-form-note">A secure reset link is sent to the current Auth email. No temporary password is displayed.</p>
               </AccountActionForm>
               <AccountActionForm action={changeManagedAccountStatus} className="account-edit-form" submitLabel="Save account status" pendingLabel="Updating..." confirmMessage={`Change the account status for ${fullName}? This affects both Supabase Auth sign-in and Schooliva access.`}>
                 <input type="hidden" name="userId" value={userId} />

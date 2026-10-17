@@ -35,8 +35,8 @@ describe("transport workflow validation", () => {
   it("validates route assignments and bounded fee plans", () => {
     expect(assignmentSchema.safeParse({ studentId: id, routeId: id, pickupStopId: "", dropoffStopId: "" }).success).toBe(true);
     expect(assignmentSchema.safeParse({ studentId: postgresUuidWithoutRfcVersion, routeId: postgresUuidWithoutRfcVersion, pickupStopId: "", dropoffStopId: "" }).success).toBe(true);
-    expect(assignmentSchema.safeParse({ studentId: id, routeId: "", pickupStopId: "", dropoffStopId: "" }).error?.issues[0]?.message).toBe("Route select karein.");
-    expect(assignmentSchema.safeParse({ studentId: id, routeId: "not-a-uuid", pickupStopId: "", dropoffStopId: "" }).error?.issues[0]?.message).toBe("Selected route ID invalid hai.");
+    expect(assignmentSchema.safeParse({ studentId: id, routeId: "", pickupStopId: "", dropoffStopId: "" }).error?.issues[0]?.message).toBe("Select a route.");
+    expect(assignmentSchema.safeParse({ studentId: id, routeId: "not-a-uuid", pickupStopId: "", dropoffStopId: "" }).error?.issues[0]?.message).toBe("The selected route ID is invalid.");
     expect(assignmentStatusSchema.safeParse({ assignmentId: id, status: "inactive" }).success).toBe(true);
     expect(transportFeeSchema.safeParse({ studentId: id, routeId: id, amount: "2500", frequency: "monthly", dueDay: "15" }).success).toBe(true);
     expect(transportFeeSchema.safeParse({ studentId: id, routeId: id, amount: "Infinity", frequency: "monthly", dueDay: "32" }).success).toBe(false);

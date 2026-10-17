@@ -18,10 +18,10 @@ export async function updateStudent(_: StudentFormState | undefined, formData: F
   const parsed = studentSchema.safeParse(values(formData));
   if (!parsed.success) return invalid(parsed.error);
   const id = String(formData.get("id") ?? "");
-  if (!id) return { error: "Student ID missing hai." };
+  if (!id) return { error: "Student ID is missing." };
   const { supabase, schoolId, user } = await requireStudentContext("update");
   if (!await canEditStudentProfile(supabase, schoolId, user.id)) {
-    return { error: "Sirf school admin ya principal student profile edit kar sakta hai." };
+    return { error: "Only a school administrator or principal can edit student profiles." };
   }
   const { error } = await supabase.from("students").update({
     first_name: parsed.data.firstName,
@@ -44,36 +44,36 @@ export async function updateStudent(_: StudentFormState | undefined, formData: F
     is_active: parsed.data.status === "active",
     deleted_at: parsed.data.status === "archived" ? new Date().toISOString() : null,
   }).eq("id", id).eq("school_id", schoolId);
-  if (error) return { error: error.code === "23505" ? "School-specific code already use ho raha hai." : "Student update nahi ho saka." };
+  if (error) return { error: error.code === "23505" ? "This school-specific code is already in use." : "The student could not be updated." };
   revalidatePath("/students");
   revalidatePath(`/students/${id}`);
-  return { success: "Student update ho gaya." };
+  return { success: "Student updated." };
 }
 
 export async function archiveStudent(_: StudentFormState | undefined, formData: FormData): Promise<StudentFormState> {
   const id = String(formData.get("id") ?? "");
   const { supabase, schoolId, user } = await requireStudentContext("delete");
   if (!await canEditStudentProfile(supabase, schoolId, user.id)) {
-    return { error: "Sirf school admin ya principal student archive kar sakta hai." };
+    return { error: "Only a school administrator or principal can archive students." };
   }
   const { error } = await supabase.from("students").update({ status: "archived", is_active: false, deleted_at: new Date().toISOString() }).eq("id", id).eq("school_id", schoolId);
-  if (error) return { error: "Student archive nahi ho saka." };
+  if (error) return { error: "The student could not be archived." };
   revalidatePath("/students");
   revalidatePath(`/students/${id}`);
-  return { success: "Student archive ho gaya." };
+  return { success: "Student archived." };
 }
 
 export async function addStudentDocument(_: StudentFormState | undefined, formData: FormData): Promise<StudentFormState> {
   const studentId = String(formData.get("studentId") ?? "");
   const documentType = String(formData.get("documentType") ?? "").trim();
   const documentName = String(formData.get("documentName") ?? "").trim();
-  if (!studentId || !documentType || !documentName) return { error: "Document type aur name required hai." };
+  if (!studentId || !documentType || !documentName) return { error: "Document type and name are required." };
   const { supabase, schoolId, user } = await requireStudentContext("update");
   if (!await canEditStudentProfile(supabase, schoolId, user.id)) {
-    return { error: "Sirf school admin ya principal student documents manage kar sakta hai." };
+    return { error: "Only a school administrator or principal can manage student documents." };
   }
   const { error } = await supabase.from("student_documents").insert({ school_id: schoolId, student_id: studentId, document_type: documentType, document_name: documentName, metadata: { source: "student_profile" } });
-  if (error) return { error: "Document metadata save nahi ho saki." };
+  if (error) return { error: "Document metadata could not be saved." };
   revalidatePath(`/students/${studentId}`);
-  return { success: "Document metadata add ho gayi." };
+  return { success: "Document metadata added." };
 }

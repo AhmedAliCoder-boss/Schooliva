@@ -8,31 +8,31 @@ function values(formData: FormData) { return Object.fromEntries(formData.entries
 
 export async function saveInventoryCategory(_: InventoryFormState | undefined, formData: FormData): Promise<InventoryFormState> {
   const parsed = categorySchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Category form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Category form is invalid." };
   const { supabase, schoolId } = await requireInventoryContext("manage");
   const { error } = await supabase.from("inventory_categories").insert({ school_id: schoolId, name: parsed.data.name });
   if (error) {
     console.error("Inventory category could not be created.", error);
-    return { error: error.code === "23505" ? "Category already exists." : "Category add nahi ho saka." };
+    return { error: error.code === "23505" ? "Category already exists." : "Category could not be added." };
   }
-  revalidatePath("/inventory"); return { success: "Category add ho gaya." };
+  revalidatePath("/inventory"); return { success: "Category added." };
 }
 
 export async function saveInventoryUnit(_: InventoryFormState | undefined, formData: FormData): Promise<InventoryFormState> {
   const parsed = unitSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Unit form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Unit form is invalid." };
   const { supabase, schoolId } = await requireInventoryContext("manage");
   const { error } = await supabase.from("inventory_units").insert({ school_id: schoolId, name: parsed.data.name, short_name: parsed.data.shortName });
   if (error) {
     console.error("Inventory unit could not be created.", error);
-    return { error: error.code === "23505" ? "Unit already exists." : "Unit add nahi ho saka." };
+    return { error: error.code === "23505" ? "Unit already exists." : "Unit could not be added." };
   }
-  revalidatePath("/inventory"); return { success: "Unit add ho gaya." };
+  revalidatePath("/inventory"); return { success: "Unit added." };
 }
 
 export async function saveSupplier(_: InventoryFormState | undefined, formData: FormData): Promise<InventoryFormState> {
   const parsed = supplierSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Supplier form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Supplier form is invalid." };
   const { supabase, schoolId } = await requireInventoryContext("manage");
   const { error } = await supabase.from("inventory_suppliers").insert({
     school_id: schoolId,
@@ -44,14 +44,14 @@ export async function saveSupplier(_: InventoryFormState | undefined, formData: 
   });
   if (error) {
     console.error("Inventory supplier could not be created.", error);
-    return { error: error.code === "23505" ? "Supplier already exists." : "Supplier add nahi ho saka." };
+    return { error: error.code === "23505" ? "Supplier already exists." : "Supplier could not be added." };
   }
-  revalidatePath("/inventory"); return { success: "Supplier add ho gaya." };
+  revalidatePath("/inventory"); return { success: "Supplier added." };
 }
 
 export async function saveInventoryItem(_: InventoryFormState | undefined, formData: FormData): Promise<InventoryFormState> {
   const parsed = itemSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Item form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Item form is invalid." };
   const { supabase, schoolId } = await requireInventoryContext("manage");
   const { error } = await supabase.from("inventory_items").insert({
     school_id: schoolId,
@@ -69,14 +69,14 @@ export async function saveInventoryItem(_: InventoryFormState | undefined, formD
   });
   if (error) {
     console.error("Inventory item could not be created.", error);
-    return { error: error.code === "23505" ? "An item with this SKU or name already exists." : "Item add nahi ho saka." };
+    return { error: error.code === "23505" ? "An item with this SKU or name already exists." : "Item could not be added." };
   }
-  revalidatePath("/inventory"); return { success: "Item add ho gaya." };
+  revalidatePath("/inventory"); return { success: "Item added." };
 }
 
 export async function recordInventoryTransaction(_: InventoryFormState | undefined, formData: FormData): Promise<InventoryFormState> {
   const parsed = stockTransactionSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Stock transaction invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Stock transaction is invalid." };
   const { supabase, schoolId, user } = await requireInventoryContext("manage");
   const paymentBillValue = formData.get("paymentBill");
   const paymentBill = paymentBillValue instanceof File && paymentBillValue.size > 0 ? paymentBillValue : null;
@@ -156,7 +156,7 @@ export async function recordInventoryTransaction(_: InventoryFormState | undefin
     }
     if (error.message.includes("Stock out exceeds available quantity")) return { error: "Stock out exceeds the available quantity." };
     if (error.message.includes("Inventory item does not belong")) return { error: "Selected item was not found in this school's inventory." };
-    return { error: "Inventory transaction save nahi ho saka." };
+    return { error: "Inventory transaction could not be saved." };
   }
   revalidatePath("/inventory");
   return { success: `Stock movement recorded and on-hand quantity updated${billStoragePath ? " with payment bill attached." : "."}` };

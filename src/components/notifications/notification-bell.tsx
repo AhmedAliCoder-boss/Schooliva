@@ -63,7 +63,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: { initialUnreadCoun
         if (newest) {
           setToast(newest);
           if (typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "granted" && document.visibilityState === "hidden") {
-            new window.Notification(newest.title, { body: newest.message, icon: "/icons/icon-192.svg", tag: newest.id });
+            new window.Notification(newest.title, { body: newest.message, icon: "/brand/app-icon-192.png", tag: newest.id });
           }
         }
       }
@@ -185,7 +185,7 @@ export function NotificationBell({ initialUnreadCount = 0 }: { initialUnreadCoun
         </Link>) : <div className="notification-popover__empty"><span aria-hidden="true">✓</span><strong>You’re all caught up</strong><small>New school updates will show here.</small></div>}
       </div>
       <footer className="notification-popover__footer">
-        {data.unreadCount > 0 && <button type="button" onClick={() => void readAll()}>Mark all read</button>}
+        {data.unreadCount > 0 && <button type="button" data-offline-write onClick={() => void readAll()}>Mark all read</button>}
         <button type="button" className="notification-popover__browser" onClick={() => void enableBrowserAlerts()}>{browserAlerts ? "Browser alerts enabled" : "Enable browser alerts"}</button>
         <Link href="/notifications" onClick={() => setOpen(false)}>Open notification center <span aria-hidden="true">→</span></Link>
       </footer>

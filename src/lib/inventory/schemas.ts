@@ -5,22 +5,22 @@ const databaseUuid = (message?: string) => z.string().regex(
   message,
 );
 
-export const categorySchema = z.object({ name: z.string().trim().min(1, "Category name required hai.").max(120) });
-export const unitSchema = z.object({ name: z.string().trim().min(1, "Unit name required hai.").max(80), shortName: z.string().trim().min(1, "Short name required hai.").max(20) });
+export const categorySchema = z.object({ name: z.string().trim().min(1, "Category name is required.").max(120) });
+export const unitSchema = z.object({ name: z.string().trim().min(1, "Unit name is required.").max(80), shortName: z.string().trim().min(1, "Short name is required.").max(20) });
 export const supplierSchema = z.object({
-  name: z.string().trim().min(1, "Supplier name required hai.").max(160),
+  name: z.string().trim().min(1, "Supplier name is required.").max(160),
   contactName: z.string().trim().max(160).optional(),
   phone: z.string().trim().max(40).optional(),
-  email: z.string().trim().email("Valid email required hai.").max(254).optional().or(z.literal("")),
+  email: z.string().trim().email("A valid email address is required.").max(254).optional().or(z.literal("")),
   address: z.string().trim().max(1000).optional(),
 });
 
 export const itemSchema = z.object({
-  categoryId: databaseUuid("Category required hai."),
-  unitId: databaseUuid("Unit required hai."),
+  categoryId: databaseUuid("Category is required."),
+  unitId: databaseUuid("Unit is required."),
   supplierId: databaseUuid().optional().or(z.literal("")),
-  sku: z.string().trim().min(1, "SKU required hai.").max(80),
-  name: z.string().trim().min(1, "Item name required hai.").max(180),
+  sku: z.string().trim().min(1, "SKU is required.").max(80),
+  name: z.string().trim().min(1, "Item name is required.").max(180),
   description: z.string().trim().max(2000).optional(),
   cost: z.coerce.number().finite().min(0).max(1000000000),
   location: z.string().trim().max(120).optional(),
@@ -30,9 +30,9 @@ export const itemSchema = z.object({
 });
 
 export const stockTransactionSchema = z.object({
-  itemId: databaseUuid("Item required hai."),
+  itemId: databaseUuid("Item is required."),
   transactionType: z.enum(["stock_in", "stock_out", "adjustment", "return"]),
-  quantity: z.coerce.number().int().min(-100000000).max(100000000).refine((value) => value !== 0, "Quantity zero nahi ho sakta."),
+  quantity: z.coerce.number().int().min(-100000000).max(100000000).refine((value) => value !== 0, "Quantity cannot be zero."),
   unitCost: z.coerce.number().finite().min(0).max(1000000000).optional().or(z.literal("")),
   reference: z.string().trim().max(120).optional(),
   purchaseDepartment: z.string().trim().max(120).optional(),

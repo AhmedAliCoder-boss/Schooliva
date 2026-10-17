@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 
-import { getSlcTcStudentDetails, issueSlcTc, reviewStudentCertificate, type SlcTcExamOption } from "@/app/actions/documents";
+import { getSlcTcStudentDetails, issueCertificate, issueSlcTc, reviewStudentCertificate, type SlcTcExamOption } from "@/app/actions/documents";
 import { SubmitButton } from "@/components/auth/submit-button";
 import type { DocumentFormState } from "@/lib/documents/schemas";
 
@@ -40,8 +40,17 @@ export type SlcTcHistoryRow = {
   studentId: string;
 };
 export type SlcTcPendingApprovalRow = SlcTcHistoryRow & { certificateType: "character" | "leaving" | "completion" };
-type CertificateKind = "slc_tc" | "character" | "completion";
+type CertificateKind = "slc_tc" | "character" | "completion" | "bonafide" | "enrollment";
+type DetailedCertificateKind = "slc_tc" | "character" | "completion";
 type SlcTcFeeStatus = "cleared" | "pending" | "not_recorded" | "waived";
+
+function hasDetailedFields(kind: CertificateKind): kind is DetailedCertificateKind {
+  return kind === "slc_tc" || kind === "character" || kind === "completion";
+}
+
+function needsAcademicDetails(kind: CertificateKind) {
+  return kind === "slc_tc" || kind === "completion";
+}
 
 function isSlcTcFeeStatus(value: string): value is SlcTcFeeStatus {
   return value === "cleared" || value === "pending" || value === "not_recorded" || value === "waived";
@@ -67,7 +76,7 @@ function CertificateDetails({
 }: {
   student: SlcTcStudentOption;
   today: string;
-  kind: CertificateKind;
+  kind: DetailedCertificateKind;
   classSections: SlcTcClassSectionOption[];
   sessions: SlcTcSessionOption[];
   nextCertificateNumber: string | null;
@@ -204,6 +213,7 @@ export function SlcTcWorkflow({
   nextCertificateNumber: string | null;
 }) {
   const [state, action] = useActionState(issueSlcTc, undefined);
+  const [basicState, basicAction] = useActionState(issueCertificate, undefined);
   const [kind, setKind] = useState<CertificateKind>("slc_tc");
   const [studentId, setStudentId] = useState("");
   const [query, setQuery] = useState("");
@@ -221,7 +231,7 @@ export function SlcTcWorkflow({
     setExamOptions([]);
     setFeeStatus("not_recorded");
     setDetailsError("");
-    setDetailsLoading(kind !== "character");
+    setDetailsLoading(needsAcademicDetails(kind));
   }
 
   function chooseKind(nextKind: CertificateKind) {
@@ -229,11 +239,11 @@ export function SlcTcWorkflow({
     setExamOptions([]);
     setFeeStatus("not_recorded");
     setDetailsError("");
-    setDetailsLoading(Boolean(studentId) && nextKind !== "character");
+    setDetailsLoading(Boolean(studentId) && needsAcademicDetails(nextKind));
   }
 
   useEffect(() => {
-    if (!studentId || kind === "character") return;
+    if (!studentId || !needsAcademicDetails(kind)) return;
     let isCurrent = true;
     getSlcTcStudentDetails(studentId).then((details) => {
       if (!isCurrent) return;
@@ -254,17 +264,21 @@ export function SlcTcWorkflow({
     return () => { isCurrent = false; };
   }, [kind, studentId]);
 
+  const usesBasicIssueAction = kind === "bonafide" || kind === "enrollment";
   return <div className="slc-tc-layout">
     <section className="student-panel slc-tc-issue">
-      <div className="student-panel-heading"><div><h2>Prepare certificate</h2><p>Select an active student and complete the details for SLC, TC, or school completion.</p></div><span>New issue</span></div>
-      <form action={action} className="student-form">
-        <Feedback state={state} />
+      <div className="student-panel-heading"><div><h2>Prepare certificate</h2><p>Issue and track every student certificate from one workflow.</p></div><span>New issue</span></div>
+      <form action={usesBasicIssueAction ? basicAction : action} className="student-form">
+        <Feedback state={usesBasicIssueAction ? basicState : state} />
         <input type="hidden" name="studentId" value={studentId} />
         <input type="hidden" name="certificateKind" value={kind} />
+        {usesBasicIssueAction && <input type="hidden" name="certificateType" value={kind} />}
         <div className="slc-tc-kind-selector" role="group" aria-label="Certificate type">
           <button type="button" className={kind === "slc_tc" ? "active" : ""} aria-pressed={kind === "slc_tc"} onClick={() => chooseKind("slc_tc")}>SLC / Transfer Certificate</button>
           <button type="button" className={kind === "completion" ? "active" : ""} aria-pressed={kind === "completion"} onClick={() => chooseKind("completion")}>School Completion Certificate</button>
           <button type="button" className={kind === "character" ? "active" : ""} aria-pressed={kind === "character"} onClick={() => chooseKind("character")}>Character Certificate</button>
+          <button type="button" className={kind === "bonafide" ? "active" : ""} aria-pressed={kind === "bonafide"} onClick={() => chooseKind("bonafide")}>Bonafide</button>
+          <button type="button" className={kind === "enrollment" ? "active" : ""} aria-pressed={kind === "enrollment"} onClick={() => chooseKind("enrollment")}>Enrollment</button>
         </div>
         <div className="slc-tc-picker">
           <label className="student-field">Student
@@ -320,10 +334,19 @@ export function SlcTcWorkflow({
             <span>Admission no.: {student.admissionNumber || "—"}</span>
             <span>Current class: {[student.className, student.sectionName].filter(Boolean).join(" / ") || "Not enrolled"}</span>
           </div>
-          {kind !== "character" && detailsLoading && <p className="slc-tc-select-prompt" role="status">Loading published exam results and fee status…</p>}
-          {kind !== "character" && detailsError && <p className="student-error" role="alert">{detailsError}</p>}
-          <CertificateDetails key={`${student.id}-${kind}`} student={student} today={today} kind={kind} classSections={classSections} sessions={sessions} nextCertificateNumber={nextCertificateNumber} examOptions={examOptions} feeStatus={feeStatus} onFeeStatusChange={setFeeStatus} />
-          <SubmitButton disabled={!nextCertificateNumber || (kind !== "character" && (detailsLoading || Boolean(detailsError) || !sessions.length || !classSections.length || !student.admissionDate || !student.dateOfBirth))}>{kind === "character" ? "Request character certificate" : kind === "completion" ? "Request school completion certificate" : "Request SLC / TC"}</SubmitButton>
+          {needsAcademicDetails(kind) && detailsLoading && <p className="slc-tc-select-prompt" role="status">Loading published exam results and fee status…</p>}
+          {needsAcademicDetails(kind) && detailsError && <p className="student-error" role="alert">{detailsError}</p>}
+          {hasDetailedFields(kind)
+            ? <CertificateDetails key={`${student.id}-${kind}`} student={student} today={today} kind={kind} classSections={classSections} sessions={sessions} nextCertificateNumber={nextCertificateNumber} examOptions={examOptions} feeStatus={feeStatus} onFeeStatusChange={setFeeStatus} />
+            : <>
+              <div className="slc-tc-fields">
+                <p className="student-field">Certificate number<span>Generated automatically when the certificate is issued.</span></p>
+                <label className="student-field">Issue date<input name="issuedOn" type="date" defaultValue={today} required /></label>
+                <label className="student-field student-field-wide">Additional notes<textarea name="content" rows={4} maxLength={2000} placeholder="Optional purpose or certificate notes" /></label>
+              </div>
+              <p className="student-muted">A current active enrollment is verified and saved with the certificate before it can be issued.</p>
+            </>}
+          <SubmitButton disabled={(!usesBasicIssueAction && !nextCertificateNumber) || (needsAcademicDetails(kind) && (detailsLoading || Boolean(detailsError) || !sessions.length || !classSections.length || !student.admissionDate || !student.dateOfBirth))}>{kind === "character" ? "Request character certificate" : kind === "completion" ? "Request school completion certificate" : kind === "slc_tc" ? "Request SLC / TC" : `Issue ${kind === "bonafide" ? "Bonafide" : "Enrollment"} certificate`}</SubmitButton>
         </> : <p className="slc-tc-select-prompt">Choose a student to enter and issue their certificate.</p>}
       </form>
     </section>
@@ -346,7 +369,7 @@ export function SlcTcWorkflow({
     </section>
 
     <section className="student-panel slc-tc-history">
-      <div className="student-panel-heading"><div><h2>Approved student certificates</h2><p>Previously approved SLC / TC, school completion, and character certificates.</p></div><span>{history.length} records</span></div>
+      <div className="student-panel-heading"><div><h2>Certificate history</h2><p>Issued certificates of every type, with print-ready documents.</p></div><span>{history.length} records</span></div>
       <div className="student-table-wrap"><table className="student-table">
         <thead><tr><th>Certificate</th><th>Student</th><th>Student ID</th><th>Issued</th><th>Document</th></tr></thead>
         <tbody>{history.length ? history.map((item) => <tr key={item.id}>
@@ -354,8 +377,13 @@ export function SlcTcWorkflow({
           <td>{item.studentName}</td>
           <td>{item.studentId}</td>
           <td>{item.issuedOn}</td>
-          <td><Link className="text-action" href={`/documents/certificates/${item.id}`}>Open / print →</Link></td>
-        </tr>) : <tr><td colSpan={5}><div className="student-empty"><h3>No student certificates issued yet</h3><p>Approved certificates will be listed here.</p></div></td></tr>}</tbody>
+          <td>
+            <div className="certificate-history-actions">
+              <Link className="text-action" href={`/certificates/${item.id}/record`}>View record</Link>
+              <Link className="text-action" href={`/certificates/${item.id}`}>Print certificate</Link>
+            </div>
+          </td>
+        </tr>) : <tr><td colSpan={5}><div className="student-empty"><h3>No student certificates issued yet</h3><p>Issued and approved certificates will appear here.</p></div></td></tr>}</tbody>
       </table></div>
     </section>
   </div>;

@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { certificateReviewSchema, characterCertificateSchema, nextFourDigitCertificateNumber, slcTcSchema } from "../../src/lib/documents/schemas";
+import { certificateReviewSchema, certificateSchema, characterCertificateSchema, nextFourDigitCertificateNumber, slcTcSchema } from "../../src/lib/documents/schemas";
 
 describe("SLC/TC certificate validation", () => {
+  it("accepts bonafide and enrollment certificate requests with database UUIDs", () => {
+    const certificate = {
+      studentId: "60000000-0000-0000-0000-000000000002",
+      certificateNumber: "B-2026-001",
+      issuedOn: "2026-10-15",
+      content: "",
+    };
+    expect(certificateSchema.safeParse({ ...certificate, certificateType: "bonafide" }).success).toBe(true);
+    expect(certificateSchema.safeParse({ ...certificate, certificateType: "enrollment" }).success).toBe(true);
+    expect(certificateSchema.safeParse({ ...certificate, studentId: "not-a-uuid", certificateType: "bonafide" }).success).toBe(false);
+  });
+
   const certificate = {
     studentId: "d9428888-122b-4f71-bdf3-57db2058e358",
     certificateTitle: "School Leaving Certificate",

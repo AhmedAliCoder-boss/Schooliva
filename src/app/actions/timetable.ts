@@ -19,7 +19,7 @@ export async function saveTimetableEntry(_: TimetableFormState | undefined, form
     status: String(formData.get("status") ?? "active"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Timetable form invalid hai." };
+    return { error: parsed.error.issues[0]?.message ?? "Timetable form is invalid." };
   }
 
   const { supabase, schoolId } = await requireTimetableContext("manage");

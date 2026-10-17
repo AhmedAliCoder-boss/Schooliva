@@ -1,7 +1,9 @@
 import { z } from "zod";
 
+const postgresUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Student is required.");
+
 export const certificateSchema = z.object({
-  studentId: z.string().uuid("Student required hai."),
+  studentId: postgresUuid,
   certificateType: z.enum(["character", "bonafide", "leaving", "enrollment"]),
   certificateNumber: z.string().trim().max(80).optional(),
   issuedOn: z.string().trim().min(1),
@@ -47,7 +49,7 @@ export const slcTcSchema = z.object({
 });
 
 export const certificateReviewSchema = z.object({
-  certificateId: z.string().uuid("Certificate required hai."),
+  certificateId: z.string().uuid("Certificate is required."),
   decision: z.enum(["approve", "reject"]),
   notes: z.string().trim().max(1000).optional(),
 });

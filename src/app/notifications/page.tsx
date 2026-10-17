@@ -1,9 +1,15 @@
 import { requireNotificationContext } from "@/lib/notifications/context";
 import { NotificationCenter, type NotificationCenterRow } from "@/components/notifications/notification-center";
+import { isMasterAdminUser } from "@/lib/auth/roles";
+import { requireUser } from "@/lib/auth/authorization";
+import { redirect } from "next/navigation";
 
 type RecipientRole = { slug: string; name: string; recipient_count: number };
 
 export default async function NotificationsPage() {
+  const current = await requireUser();
+  if (await isMasterAdminUser(current.supabase, current.user.id)) redirect("/admin/notifications");
+
   const { supabase, schoolId, user } = await requireNotificationContext();
   const [
     { data: notifications, error: notificationError },

@@ -9,19 +9,19 @@ function values(formData: FormData) { return Object.fromEntries(formData.entries
 
 export async function saveDriver(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = driverSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Driver form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The driver form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { error } = await supabase.from("transport_drivers").insert({ school_id: schoolId, full_name: parsed.data.fullName, license_number: parsed.data.licenseNumber, phone: parsed.data.phone || null, status: parsed.data.status ?? "active" });
   if (error) {
     console.error("Transport driver could not be added.", error);
-    return { error: error.code === "23505" ? "Driver license number already exists." : "Driver add nahi ho saka." };
+    return { error: error.code === "23505" ? "Driver license number already exists." : "The driver could not be added." };
   }
-  revalidatePath("/transport"); return { success: "Driver add ho gaya." };
+  revalidatePath("/transport"); return { success: "Driver added." };
 }
 
 export async function saveVehicle(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = vehicleSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Vehicle form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The vehicle form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   if (parsed.data.driverId) {
     const { data: driver, error: driverError } = await supabase.from("transport_drivers").select("id,status").eq("id", parsed.data.driverId).eq("school_id", schoolId).maybeSingle();
@@ -34,14 +34,14 @@ export async function saveVehicle(_: TransportFormState | undefined, formData: F
   const { error } = await supabase.from("transport_vehicles").insert({ school_id: schoolId, registration_number: parsed.data.registrationNumber, vehicle_type: parsed.data.vehicleType, capacity: parsed.data.capacity, status: parsed.data.status ?? "active", driver_id: parsed.data.driverId || null, notes: parsed.data.notes || null });
   if (error) {
     console.error("Transport vehicle could not be added.", error);
-    return { error: error.code === "23505" ? "Vehicle registration already exists." : "Vehicle add nahi ho saka." };
+    return { error: error.code === "23505" ? "Vehicle registration already exists." : "The vehicle could not be added." };
   }
-  revalidatePath("/transport"); return { success: "Vehicle add ho gaya." };
+  revalidatePath("/transport"); return { success: "Vehicle added." };
 }
 
 export async function saveRoute(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = routeSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Route form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The route form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   if (parsed.data.vehicleId) {
     const { data: vehicle, error: vehicleError } = await supabase.from("transport_vehicles").select("id,status").eq("id", parsed.data.vehicleId).eq("school_id", schoolId).maybeSingle();
@@ -54,26 +54,26 @@ export async function saveRoute(_: TransportFormState | undefined, formData: For
   const { error } = await supabase.from("transport_routes").insert({ school_id: schoolId, name: parsed.data.name, route_code: parsed.data.routeCode, vehicle_id: parsed.data.vehicleId || null, description: parsed.data.description || null, status: parsed.data.status ?? "active" });
   if (error) {
     console.error("Transport route could not be added.", error);
-    return { error: error.code === "23505" ? "Route code already exists." : "Route add nahi ho saka." };
+    return { error: error.code === "23505" ? "Route code already exists." : "The route could not be added." };
   }
-  revalidatePath("/transport"); return { success: "Route add ho gaya." };
+  revalidatePath("/transport"); return { success: "Route added." };
 }
 
 export async function saveStop(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = stopSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Stop form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The stop form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { error } = await supabase.from("transport_stops").insert({ school_id: schoolId, name: parsed.data.name, stop_type: parsed.data.stopType ?? "pickup", address: parsed.data.address || null, latitude: parsed.data.latitude === "" ? null : parsed.data.latitude, longitude: parsed.data.longitude === "" ? null : parsed.data.longitude });
   if (error) {
     console.error("Transport stop could not be added.", error);
-    return { error: error.code === "23505" ? "Stop already exists." : "Stop add nahi ho saka." };
+    return { error: error.code === "23505" ? "Stop already exists." : "The stop could not be added." };
   }
-  revalidatePath("/transport"); return { success: "Stop add ho gaya." };
+  revalidatePath("/transport"); return { success: "Stop added." };
 }
 
 export async function saveStudentAssignment(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = assignmentSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Assignment form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The assignment form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { data: studentOptions, error: studentError } = await supabase.rpc("transport_students_for_assignment", { target_school_id: schoolId });
   if (studentError) {
@@ -98,16 +98,16 @@ export async function saveStudentAssignment(_: TransportFormState | undefined, f
   });
   if (error) {
     console.error("Transport student assignment could not be saved.", error);
-    if (error.message.includes("capacity")) return { error: "Vehicle capacity exceed ho gayi hai." };
+    if (error.message.includes("capacity")) return { error: "Vehicle capacity has been exceeded." };
     if (error.code === "23505") return { error: "This student already has an assignment on the selected route or stop." };
-    return { error: error.message.toLowerCase().includes("stop not on this route") ? "Choose pickup and drop-off stops that belong to this route." : "Student assignment save nahi ho saka." };
+    return { error: error.message.toLowerCase().includes("stop not on this route") ? "Choose pickup and drop-off stops that belong to this route." : "The student assignment could not be saved." };
   }
-  revalidatePath("/transport"); return { success: "Student assigned ho gaya." };
+  revalidatePath("/transport"); return { success: "Student assigned." };
 }
 
 export async function saveTransportFee(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = transportFeeSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Transport fee form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The transport fee form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const [{ data: studentOptions, error: studentError }, { data: route, error: routeError }] = await Promise.all([
     supabase.rpc("transport_students_for_assignment", { target_school_id: schoolId }),
@@ -131,14 +131,14 @@ export async function saveTransportFee(_: TransportFormState | undefined, formDa
   }, { onConflict: "school_id,route_id,student_id" });
   if (error) {
     console.error("Transport fee could not be saved.", error);
-    return { error: "Transport fee save nahi ho saka." };
+    return { error: "The transport fee could not be saved." };
   }
-  revalidatePath("/transport"); return { success: "Transport fee set ho gaya." };
+  revalidatePath("/transport"); return { success: "Transport fee set." };
 }
 
 export async function saveRouteStop(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = routeStopSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Route stop form invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The route stop form is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const [{ data: route, error: routeError }, { data: stop, error: stopError }] = await Promise.all([
     supabase.from("transport_routes").select("id,status").eq("id", parsed.data.routeId).eq("school_id", schoolId).maybeSingle(),
@@ -168,7 +168,7 @@ export async function saveRouteStop(_: TransportFormState | undefined, formData:
 
 export async function updateAssignmentStatus(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = assignmentStatusSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Assignment status invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The assignment status is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { data: assignment, error } = await supabase.from("transport_student_assignments")
     .update({ status: parsed.data.status })
@@ -187,7 +187,7 @@ export async function updateAssignmentStatus(_: TransportFormState | undefined, 
 
 export async function updateVehicleStatus(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = vehicleStatusSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Vehicle status invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The vehicle status is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { data: vehicle, error } = await supabase.from("transport_vehicles")
     .update({ status: parsed.data.status })
@@ -206,7 +206,7 @@ export async function updateVehicleStatus(_: TransportFormState | undefined, for
 
 export async function updateDriverStatus(_: TransportFormState | undefined, formData: FormData): Promise<TransportFormState> {
   const parsed = driverStatusSchema.safeParse(values(formData));
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Driver status invalid hai." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "The driver status is invalid." };
   const { supabase, schoolId } = await requireTransportContext("manage");
   const { data: driver, error } = await supabase.from("transport_drivers")
     .update({ status: parsed.data.status })

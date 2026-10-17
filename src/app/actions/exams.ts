@@ -5,7 +5,7 @@ import { examScheduleSchema, examSchema, examSubjectSchema, examTypeSchema, grad
 function values(formData: FormData) { return Object.fromEntries(formData.entries()); }
 
 export async function createExam(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = examSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Exam form complete nahi hai." };
+  const parsed = examSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required exam fields." };
   const { supabase, schoolId, user } = await requireExamContext("manage");
   const [
     { data: examType, error: examTypeError },
@@ -26,7 +26,7 @@ export async function createExam(_: ExamFormState | undefined, formData: FormDat
     return { error: "Select an active exam type, academic session, and grading scale from this school." };
   }
   const { error } = await supabase.from("exams").insert({ school_id: schoolId, exam_type_id: parsed.data.examTypeId, academic_session_id: parsed.data.academicSessionId, name: parsed.data.name, starts_on: parsed.data.startsOn, ends_on: parsed.data.endsOn, grading_scale_id: parsed.data.gradingScaleId || null, created_by: user.id });
-  if (error) return { error: error.code === "23505" ? "Exam name already use ho raha hai." : "Exam create nahi ho saka." }; revalidatePath("/exams"); return { success: "Exam create ho gaya." };
+  if (error) return { error: error.code === "23505" ? "An exam with this name already exists." : "Exam could not be created." }; revalidatePath("/exams"); return { success: "Exam created." };
 }
 
 export async function changeExamSectionStatus(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
@@ -34,7 +34,7 @@ export async function changeExamSectionStatus(_: ExamFormState | undefined, form
   const sectionId = String(formData.get("sectionId") ?? "");
   const nextStatus = String(formData.get("nextStatus") ?? "");
   if (!examId || !sectionId || !["submitted", "reviewed", "published"].includes(nextStatus)) {
-    return { error: "Exam section workflow request invalid hai." };
+    return { error: "Exam section workflow request is invalid." };
   }
   const { supabase, schoolId } = await requireExamContext("manage");
   const { data: overallStatus, error } = await supabase.rpc("transition_exam_section_workflow", {
@@ -61,42 +61,42 @@ export async function changeExamSectionStatus(_: ExamFormState | undefined, form
   return {
     success: overallStatus === "published"
       ? "All active sections are published. The exam is now complete."
-      : `Section ${nextStatus} ho gaya. Overall exam status: ${String(overallStatus ?? "pending")}.`,
+      : `Section ${nextStatus}. Overall exam status: ${String(overallStatus ?? "pending")}.`,
   };
 }
 
 export async function saveExamType(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = examTypeSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Exam type form complete nahi hai." };
+  const parsed = examTypeSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required exam type fields." };
   const { supabase, schoolId } = await requireExamContext("manage");
   const { error } = await supabase.from("exam_types").insert({ school_id: schoolId, name: parsed.data.name, description: parsed.data.description || null });
   if (error) {
     console.error("Exam type could not be added.", error);
-    if (error.code === "23505") return { error: "Exam type already use ho raha hai." };
+    if (error.code === "23505") return { error: "An exam type with this name already exists." };
     if (error.code === "42501") return { error: "You do not have permission to add exam types for this school." };
-    return { error: "Exam type add nahi ho saka. Refresh and try again." };
+    return { error: "Exam type could not be added. Refresh and try again." };
   }
   revalidatePath("/exams");
-  return { success: "Exam type add ho gaya." };
+  return { success: "Exam type added." };
 }
 
 export async function saveGradingScale(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = gradingScaleSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Grading scale form complete nahi hai." };
+  const parsed = gradingScaleSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required grading scale fields." };
   const { supabase, schoolId } = await requireGradingContext("manage");
   const { error } = await supabase.from("grading_scales").insert({ school_id: schoolId, name: parsed.data.name, description: parsed.data.description || null });
-  if (error) return { error: error.code === "23505" ? "Grading scale already use ho raha hai." : "Grading scale add nahi hua." }; revalidatePath("/exams"); return { success: "Grading scale add ho gaya." };
+  if (error) return { error: error.code === "23505" ? "A grading scale with this name already exists." : "Grading scale could not be added." }; revalidatePath("/exams"); return { success: "Grading scale added." };
 }
 
 export async function addGradeBoundary(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = gradeBoundarySchema.safeParse(values(formData)); if (!parsed.success) return { error: "Grade boundary form complete nahi hai." };
+  const parsed = gradeBoundarySchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required grade boundary fields." };
   const { supabase, schoolId } = await requireGradingContext("manage");
   const { data: scale } = await supabase.from("grading_scales").select("school_id").eq("id", parsed.data.gradingScaleId).maybeSingle();
-  if (!scale || String(scale.school_id) !== schoolId) return { error: "Grading scale is school se nahi hai." };
+  if (!scale || String(scale.school_id) !== schoolId) return { error: "Select a grading scale from this school." };
   const { error } = await supabase.from("grade_boundaries").insert({ grading_scale_id: parsed.data.gradingScaleId, grade: parsed.data.grade, min_percentage: parsed.data.minPercentage, max_percentage: parsed.data.maxPercentage, grade_point: parsed.data.gradePoint === "" ? null : parsed.data.gradePoint, remark: parsed.data.remark || null });
-  if (error) return { error: error.code === "23505" ? "Ye grade already is scale mein hai." : "Grade boundary add nahi hui." }; revalidatePath("/exams"); return { success: "Grade boundary add ho gayi." };
+  if (error) return { error: error.code === "23505" ? "This grade already exists in this grading scale." : "Grade boundary could not be added." }; revalidatePath("/exams"); return { success: "Grade boundary added." };
 }
 
 export async function saveExamSubject(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = examSubjectSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Exam subject form complete nahi hai." };
+  const parsed = examSubjectSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required exam subject fields." };
   const { supabase, schoolId } = await requireExamContext("manage");
   const { data, error } = await supabase.rpc("add_exam_subject_to_class", {
     p_school_id: schoolId,
@@ -134,7 +134,7 @@ export async function saveExamSubject(_: ExamFormState | undefined, formData: Fo
 }
 
 export async function removeExamSubject(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const id = String(formData.get("id") ?? ""); const examId = String(formData.get("examId") ?? ""); if (!id) return { error: "Subject required hai." };
+  const id = String(formData.get("id") ?? ""); const examId = String(formData.get("examId") ?? ""); if (!id) return { error: "A subject is required." };
   const { supabase, schoolId } = await requireExamContext("manage");
   const { data: exam, error: examError } = await supabase.from("exams").select("status").eq("id", examId).eq("school_id", schoolId).maybeSingle();
   if (examError) {
@@ -155,13 +155,13 @@ export async function removeExamSubject(_: ExamFormState | undefined, formData: 
     console.error("Exam subject could not be verified before removal.", subjectError);
     return { error: "Exam subject could not be verified. Refresh and try again." };
   }
-  if (!subject) return { error: "Subject nahi mila." };
+  if (!subject) return { error: "Subject was not found." };
   const { error } = await supabase.from("exam_subjects").delete().eq("id", id).eq("exam_id", examId).eq("school_id", schoolId);
-  if (error) return { error: "Exam subject remove nahi hua. Existing records check karein." }; revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); return { success: "Exam subject remove ho gaya." };
+  if (error) return { error: "Exam subject could not be removed. Check for existing records." }; revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); return { success: "Exam subject removed." };
 }
 
 export async function saveExamSchedule(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const parsed = examScheduleSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Exam schedule form complete nahi hai." };
+  const parsed = examScheduleSchema.safeParse(values(formData)); if (!parsed.success) return { error: "Complete all required exam schedule fields." };
   const examId = parsed.data.examId;
   const { supabase, schoolId } = await requireExamContext("manage");
   const [
@@ -213,16 +213,16 @@ export async function saveExamSchedule(_: ExamFormState | undefined, formData: F
   if (error) {
     if (error.code === "23P01") return { error: "This examiner is already assigned to another exam at that time." };
     if (error.message.includes("submitted for marking")) return { error: error.message };
-    return { error: error.code === "23505" ? "Ye subject is section aur date par already schedule hai." : "Exam schedule add nahi hua." };
+    return { error: error.code === "23505" ? "This subject is already scheduled for this section and date." : "Exam schedule could not be added." };
   }
   revalidatePath(`/exams/${examId}`);
   revalidatePath("/exams");
   revalidatePath("/exams/timetable");
-  return { success: "Exam schedule add ho gaya." };
+  return { success: "Exam schedule added." };
 }
 
 export async function removeExamSchedule(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
-  const id = String(formData.get("id") ?? ""); const examId = String(formData.get("examId") ?? ""); if (!id) return { error: "Schedule required hai." };
+  const id = String(formData.get("id") ?? ""); const examId = String(formData.get("examId") ?? ""); if (!id) return { error: "A schedule is required." };
   const { supabase, schoolId } = await requireExamContext("manage");
   const { data: schedule, error: scheduleError } = await supabase.from("exam_schedules")
     .select("id,section_id,exam_subjects(exam_id)").eq("id", id).eq("school_id", schoolId).maybeSingle();
@@ -231,7 +231,7 @@ export async function removeExamSchedule(_: ExamFormState | undefined, formData:
     return { error: "Exam schedule could not be verified. Refresh and try again." };
   }
   const examSubject = Array.isArray(schedule?.exam_subjects) ? schedule.exam_subjects[0] : schedule?.exam_subjects;
-  if (!schedule || examSubject?.exam_id !== examId) return { error: "Schedule nahi mila." };
+  if (!schedule || examSubject?.exam_id !== examId) return { error: "Schedule was not found." };
   const { data: exam, error: examError } = await supabase.from("exams").select("status").eq("id", examId).eq("school_id", schoolId).maybeSingle();
   if (examError) {
     console.error("Exam status could not be checked before removing a schedule.", examError);
@@ -241,20 +241,20 @@ export async function removeExamSchedule(_: ExamFormState | undefined, formData:
   const { error } = await supabase.from("exam_schedules").delete().eq("id", id).eq("school_id", schoolId);
   if (error) {
     if (error.message.includes("submitted for marking")) return { error: error.message };
-    return { error: "Exam schedule remove nahi hua." };
+    return { error: "Exam schedule could not be removed." };
   }
-  revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); revalidatePath("/exams/timetable"); return { success: "Exam schedule remove ho gaya." };
+  revalidatePath(`/exams/${examId}`); revalidatePath("/exams"); revalidatePath("/exams/timetable"); return { success: "Exam schedule removed." };
 }
 
 export async function submitMarks(_: ExamFormState | undefined, formData: FormData): Promise<ExamFormState> {
   const rawRecords = String(formData.get("records") ?? "[]"); let records: unknown;
-  try { records = JSON.parse(rawRecords); } catch { return { error: "Marks records invalid hain." }; }
+  try { records = JSON.parse(rawRecords); } catch { return { error: "Marks records are invalid." }; }
   const parsed = marksSubmissionSchema.safeParse({
     examSubjectId: formData.get("examSubjectId"),
     sectionId: formData.get("sectionId"),
     records,
   });
-  if (!parsed.success) return { error: "Marks form complete nahi hai." };
+  if (!parsed.success) return { error: "Complete all required marks fields." };
   const examId = String(formData.get("examId") ?? "");
   const { supabase, schoolId, user } = await requireGradingContext("manage");
   const { data: subject, error: subjectError } = await supabase.from("exam_subjects").select("id,exam_id,maximum_marks,class_id,exams(academic_session_id,status,grading_scale_id)").eq("id", parsed.data.examSubjectId).eq("school_id", schoolId).maybeSingle();
@@ -263,7 +263,7 @@ export async function submitMarks(_: ExamFormState | undefined, formData: FormDa
     console.error("Exam subject could not be loaded for marks entry.", subjectError);
     return { error: "Exam subject could not be verified. Refresh and try again." };
   }
-  if (!subject || !exam) return { error: "Exam subject nahi mila." };
+  if (!subject || !exam) return { error: "Exam subject was not found." };
   if (String(subject.exam_id) !== examId) return { error: "Exam subject does not belong to this exam." };
   if (parsed.data.records.some((record) => record.obtainedMarks > Number(subject.maximum_marks))) {
     return { error: `Obtained marks cannot exceed ${subject.maximum_marks}.` };
@@ -311,7 +311,7 @@ export async function submitMarks(_: ExamFormState | undefined, formData: FormDa
     return { error: "Student enrolments could not be verified. Refresh and try again." };
   }
   const validIds = new Set((enrollments ?? []).map((item) => item.student_id));
-  if (parsed.data.records.some((record) => !validIds.has(record.studentId))) return { error: "Is section ke enrolled students ke liye hi marks save ho sakte hain." };
+  if (parsed.data.records.some((record) => !validIds.has(record.studentId))) return { error: "Marks can only be saved for students enrolled in this section." };
   const maximumMarks = Number(subject.maximum_marks);
   const rows = parsed.data.records.map((record) => {
     const percentage = Math.round((record.obtainedMarks / maximumMarks) * 10000) / 100;
@@ -350,9 +350,9 @@ export async function submitMarks(_: ExamFormState | undefined, formData: FormDa
       return { error: "Marks for a published exam cannot be changed." };
     }
     if (error.code === "42501") return { error: "You do not have permission to save marks for this school." };
-    return { error: `Marks save nahi ho sake (database error ${error.code || "unknown"}). Please try again; if it continues, share this error code with your administrator.` };
+    return { error: `Marks could not be saved (database error ${error.code || "unknown"}). Please try again; if the problem continues, share this error code with your administrator.` };
   }
   revalidatePath(`/exams/${examId}`);
   revalidatePath("/exams");
-  return { success: `${rows.length} students ke marks save ho gaye.` };
+  return { success: `Marks saved for ${rows.length} students.` };
 }
