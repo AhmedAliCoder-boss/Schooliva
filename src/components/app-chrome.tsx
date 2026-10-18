@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { GlobalSearchBar } from "@/components/search/global-search";
 import { LiveClock } from "@/components/dashboard/live-clock";
@@ -11,6 +11,7 @@ import { signOut } from "@/app/actions/auth";
 import { NavIcon, navGroups } from "@/components/schooliva-shell";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getActiveHref } from "@/lib/navigation/active-path";
+import { PageLoadingSkeleton } from "@/components/page-loading-skeleton";
 
 const excludedPrefixes = ["/", "/sign-in", "/forgot-password", "/admin"];
 
@@ -51,18 +52,69 @@ export function AppChrome({
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<{ from: string; to: string } | null>(null);
+  const navigationTimeout = useRef<number | null>(null);
+  const isNavigating = pendingNavigation?.from === pathname;
 
   useEffect(() => {
     const mountedTimer = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(mountedTimer);
   }, []);
   useEffect(() => {
+    if (!pendingNavigation) return;
+    if (navigationTimeout.current !== null) {
+      window.clearTimeout(navigationTimeout.current);
+    }
+    navigationTimeout.current = window.setTimeout(() => {
+      setPendingNavigation(null);
+      navigationTimeout.current = null;
+    }, pathname === pendingNavigation.from ? 15000 : pathname === pendingNavigation.to ? 150 : 0);
+    return () => {
+      if (navigationTimeout.current !== null) {
+        window.clearTimeout(navigationTimeout.current);
+        navigationTimeout.current = null;
+      }
+    };
+  }, [pathname, pendingNavigation]);
+
+  function handleNavigationClick(event: React.MouseEvent<HTMLElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!(event.target instanceof Element)) return;
+
+    const anchor = event.target.closest("a[href]");
+    if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
+    if (!event.currentTarget.contains(anchor)) return;
+
+    const destination = new URL(anchor.href);
+    if (destination.origin !== window.location.origin) return;
+    if (destination.pathname === window.location.pathname) return;
+
+    setPendingNavigation({ from: pathname, to: destination.pathname });
+    if (navigationTimeout.current !== null) window.clearTimeout(navigationTimeout.current);
+    navigationTimeout.current = window.setTimeout(() => {
+      setPendingNavigation(null);
+      navigationTimeout.current = null;
+    }, 15000);
+  }
+
+  useEffect(() => {
     const closeTimer = window.setTimeout(() => setSidebarOpen(false), 0);
     return () => window.clearTimeout(closeTimer);
   }, [pathname]);
 
-  if (pathname.startsWith("/admin") || !mounted || isExcluded(pathname) || pathname === "/dashboard") return children;
+  const transitionIndicator = isNavigating && <div className="route-loading-overlay" role="status" aria-live="polite">
+    <span className="route-loading-overlay__announcement">Loading next module</span>
+    <div className="route-loading-overlay__skeleton" aria-hidden="true">
+      <PageLoadingSkeleton />
+    </div>
+  </div>;
 
+  if (pathname.startsWith("/admin") || !mounted || isExcluded(pathname) || pathname === "/dashboard") {
+    return <div className="route-navigation-root" onClick={handleNavigationClick} aria-busy={isNavigating}>
+      {transitionIndicator}
+      {children}
+    </div>;
+  }
   const pageContext = getPageContext(pathname);
   const activeHref = getActiveHref(pathname, navGroups.flatMap((group) => group.items));
   const financeNavItems = [
@@ -80,7 +132,8 @@ export function AppChrome({
     .filter((group) => group.items.length > 0);
 
   return (
-    <div className={`app-chrome ${compact ? "is-compact" : ""}`}>
+    <div className={`app-chrome ${compact ? "is-compact" : ""}`} onClick={handleNavigationClick} aria-busy={isNavigating}>
+      {transitionIndicator}
       <button type="button" className={`app-chrome__overlay ${sidebarOpen ? "is-visible" : ""}`} aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />
       <aside className={`schooliva-sidebar ${compact ? "is-compact" : ""} ${sidebarOpen ? "is-open" : ""}`} aria-label="Main navigation">
         <div className="schooliva-sidebar__top">
