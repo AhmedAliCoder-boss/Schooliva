@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { MonthlyWhatsAppReminder } from "@/components/admin/monthly-whatsapp-reminder";
+import { filterCustomerSchoolRows } from "@/lib/admin/customer-schools";
 import { requireMasterAdmin } from "@/lib/admin/guard";
+import { buildMonthlyWhatsAppMessage, getPreviousPakistanMonth } from "@/lib/admin/monthly-whatsapp-report";
+import { reconcileInvoiceStatus } from "@/lib/billing-reconciliation";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatStorageBytes, getStorageQuotaStatus } from "@/lib/storage/quota";
 
@@ -14,7 +18,8 @@ function records(value: unknown): Record<string, unknown>[] {
 
 export default async function AdminOverviewPage() {
   const { supabase } = await requireMasterAdmin();
-  const [{ data: schools }, { data: roles }, { data: accountSummary, error: accountSummaryError }, { data: students }, { data: teachers }, { data: staff }, { data: bills }, { data: transactions }, { data: documents }, { data: quotas }, { data: audit }, { data: contracts }, { data: trials }] = await Promise.all([
+  const promotionPeriod = getPreviousPakistanMonth(new Date());
+  const [{ data: schools }, { data: roles }, { data: accountSummary, error: accountSummaryError }, { data: students }, { data: teachers }, { data: staff }, { data: bills }, { data: transactions }, { data: documents }, { data: quotas }, { data: audit }, { data: contracts }, { data: trials }, { data: promotions, error: promotionsError }] = await Promise.all([
     supabase.from("schools").select("id,name,is_active,created_at").order("created_at", { ascending: false }),
     supabase.from("user_roles").select("user_id,school_id"),
     supabase.rpc("get_account_management_summary"),
@@ -28,7 +33,9 @@ export default async function AdminOverviewPage() {
     supabase.from("audit_logs").select("id,action,entity_type,created_at,school_id").order("created_at", { ascending: false }).limit(6),
     supabase.from("platform_contracts").select("id,status,plan_name,monthly_amount,school_id").order("created_at", { ascending: false }).limit(6),
     supabase.from("school_trials").select("id,status,trial_name,seats,school_id").order("starts_on", { ascending: false }).limit(6),
+    supabase.from("student_enrollments").select("school_id,student_id").eq("status", "completed").gte("updated_at", promotionPeriod.start).lt("updated_at", promotionPeriod.end),
   ]);
+  if (promotionsError) throw new Error("Monthly student promotion summary could not be loaded.");
   const schoolRows = schools ?? [];
   const activeSchools = schoolRows.filter((school) => school.is_active).length;
   const billsRows = bills ?? [];
@@ -43,8 +50,38 @@ export default async function AdminOverviewPage() {
     { label: "Schools with overdue bills", value: new Set(billsRows.filter((bill) => String(bill.status) === "overdue").map((bill) => bill.school_id)).size, tone: "warning" },
     { label: "Recent audit activity", value: (audit ?? []).length, tone: "neutral" },
   ];
+  const customerBills = filterCustomerSchoolRows(billsRows, schoolRows.map((school) => school.id));
+  const unpaidBills = customerBills
+    .map((bill) => ({
+      schoolId: String(bill.school_id),
+      balance: reconcileInvoiceStatus({
+        total: Number(bill.total_amount ?? 0),
+        paidAmount: Number(bill.paid_amount ?? 0),
+        dueDate: String(bill.due_date ?? ""),
+      }),
+    }))
+    .filter((bill) => bill.balance.remainingAmount > 0);
+  const overdueBillCount = unpaidBills.filter((bill) => bill.balance.status === "overdue").length;
+  const schoolsWithDues = new Set(unpaidBills.map((bill) => bill.schoolId)).size;
+  const promotedStudents = new Set((promotions ?? []).map((promotion) => `${promotion.school_id}:${promotion.student_id}`));
+  const asOfDate = new Intl.DateTimeFormat("en-PK", {
+    timeZone: "Asia/Karachi",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date());
+  const monthlyWhatsAppMessage = buildMonthlyWhatsAppMessage({
+    asOfDate,
+    promotionMonth: promotionPeriod.label,
+    outstandingAmount: formatCurrency(unpaidBills.reduce((sum, bill) => sum + bill.balance.remainingAmount, 0)),
+    unpaidBillCount: unpaidBills.length,
+    overdueBillCount,
+    schoolsWithDues,
+    promotions: promotedStudents.size,
+  });
 
   return <AdminShell title="Admin Overview" description="A global operating view of the Schooliva platform. Select a school only when you need to enter its environment." breadcrumbs={[{ label: "Overview" }]}>
+    <MonthlyWhatsAppReminder message={monthlyWhatsAppMessage} promotionMonth={promotionPeriod.label} />
     <section className="admin-kpi-grid">
         <article className="admin-kpi"><span>Total schools</span><strong>{schoolRows.length}</strong><small>Live database value</small></article>
         <article className="admin-kpi"><span>Active schools</span><strong>{activeSchools}</strong><small>Live database value</small></article>

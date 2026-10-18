@@ -52,7 +52,7 @@ export default async function PlatformContractPrintPage({ params }: { params: Pa
     </div>
     <article className="platform-contract-document">
       <header className="platform-contract-document__header">
-        <div><Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority /><span>School management, clearly managed.</span></div>
+        <div><Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority unoptimized /><span>School management, clearly managed.</span></div>
         <div><span>SCHOOLIVA PLATFORM</span><h1>SUBSCRIPTION AGREEMENT</h1><strong>{contract.contract_number}</strong></div>
       </header>
 

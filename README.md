@@ -25,6 +25,27 @@ Required web variables:
 - `NEXT_PUBLIC_SUPABASE_URL`: project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: publishable/anon key only
 - `NEXT_PUBLIC_SITE_URL`: canonical app origin; use HTTPS in production
+- `SUPPORT_EMAIL_TO`: support inbox recipient (defaults to the configured Schooliva support contact)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`: optional SMTP delivery for support requests and review updates
+- `SMTP_SECURE`: optional `true`/`false`; defaults to secure TLS on port 465
+- `SMTP_FROM`: optional approved sender address; defaults to `SMTP_USER`
+
+Support requests are stored in the Schooliva in-app Master Admin inbox even
+when SMTP is not configured. Configure the SMTP variables in the deployment
+environment to enable email alerts. Apply
+`supabase/migrations/20261018000200_school_support_center.sql` before enabling
+the Support section. Never paste SMTP credentials into chat or commit them.
+
+The Master Admin overview can prepare a free monthly WhatsApp summary of
+outstanding school bills and student promotions completed in the prior month.
+Enter the recipient number in the overview; it is saved only in that browser.
+This opens a prefilled WhatsApp draft and requires a manual Send action. It does
+not schedule messages or use the WhatsApp API.
+
+Academic planning connects session curriculum mappings to unit plans, dates,
+lesson targets, assessments, teacher assignments, completion tracking, and
+teaching reflections. Apply
+`supabase/migrations/20261018000300_academic_planning.sql` to enable the module.
 
 Keep `.env.local`, test credentials, and mobile `.env` files out of Git. Never
 use `SUPABASE_SERVICE_ROLE_KEY` in `NEXT_PUBLIC_*` variables or browser/mobile

@@ -58,7 +58,7 @@ export default async function PlatformBillPrintPage({ params }: { params: Params
     <article className="platform-bill-document">
       <header className="platform-bill-document__header">
         <div className="platform-bill-document__brand">
-          <Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority />
+          <Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority unoptimized />
           <span>School management, clearly managed.</span>
         </div>
         <div className="platform-bill-document__heading">

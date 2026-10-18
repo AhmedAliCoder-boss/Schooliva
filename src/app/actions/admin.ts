@@ -28,8 +28,13 @@ const schoolSchema = z.object({
 
 const postgresUuidSchema = z.string().trim().regex(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
 
+function getFormString(formData: FormData, name: string, fallback: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : fallback;
+}
+
 const schoolBrandingSchema = z.object({
-  schoolId: z.string().uuid(),
+  schoolId: postgresUuidSchema,
   primaryColor: z.string().trim().default("#2563eb"),
   secondaryColor: z.string().trim().default("#0f172a"),
   accentColor: z.string().trim().default("#f59e0b"),
@@ -370,22 +375,27 @@ export async function saveSchoolBranding(formData: FormData) {
 
   const parsed = schoolBrandingSchema.safeParse({
     schoolId: formData.get("schoolId"),
-    primaryColor: formData.get("primaryColor") ?? "#2563eb",
-    secondaryColor: formData.get("secondaryColor") ?? "#0f172a",
-    accentColor: formData.get("accentColor") ?? "#f59e0b",
-    backgroundColor: formData.get("backgroundColor") ?? "#f8fafc",
-    foregroundColor: formData.get("foregroundColor") ?? "#0f172a",
-    cardColor: formData.get("cardColor") ?? "#ffffff",
-    mutedColor: formData.get("mutedColor") ?? "#64748b",
-    borderColor: formData.get("borderColor") ?? "#dfe7ee",
-    successColor: formData.get("successColor") ?? "#16a34a",
-    warningColor: formData.get("warningColor") ?? "#f59e0b",
-    destructiveColor: formData.get("destructiveColor") ?? "#dc2626",
-    infoColor: formData.get("infoColor") ?? "#2563eb",
-    themeMode: formData.get("themeMode") ?? "light",
+    primaryColor: getFormString(formData, "primaryColor", "#2563eb"),
+    secondaryColor: getFormString(formData, "secondaryColor", "#0f172a"),
+    accentColor: getFormString(formData, "accentColor", "#f59e0b"),
+    backgroundColor: getFormString(formData, "backgroundColor", "#f8fafc"),
+    foregroundColor: getFormString(formData, "foregroundColor", "#0f172a"),
+    cardColor: getFormString(formData, "cardColor", "#ffffff"),
+    mutedColor: getFormString(formData, "mutedColor", "#64748b"),
+    borderColor: getFormString(formData, "borderColor", "#dfe7ee"),
+    successColor: getFormString(formData, "successColor", "#16a34a"),
+    warningColor: getFormString(formData, "warningColor", "#f59e0b"),
+    destructiveColor: getFormString(formData, "destructiveColor", "#dc2626"),
+    infoColor: getFormString(formData, "infoColor", "#2563eb"),
+    themeMode: getFormString(formData, "themeMode", "light"),
   });
 
   if (!parsed.success) {
+    console.error("School branding form contains invalid fields.", parsed.error.issues.map((issue) => issue.path.join(".")));
+    const schoolId = getFormString(formData, "schoolId", "").trim();
+    if (postgresUuidSchema.safeParse(schoolId).success) {
+      redirect(`/admin/schools/${schoolId}?error=invalid-branding`);
+    }
     redirect("/admin/schools?error=invalid-branding");
   }
 

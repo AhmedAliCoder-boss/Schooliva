@@ -71,7 +71,7 @@ export default async function PlatformPaymentReceiptPage({ params }: { params: P
     <article className="platform-bill-document platform-payment-receipt">
       <header className="platform-bill-document__header">
         <div className="platform-bill-document__brand">
-          <Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority />
+          <Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority unoptimized />
         </div>
         <div className="platform-bill-document__heading">
           <span>SCHOOLIVA PLATFORM</span>

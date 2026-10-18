@@ -58,6 +58,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       ? supabase.from("profiles").select("full_name,avatar_path").eq("id", user.id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+  const { data: roleAssignments } = user && activeSchoolContext?.schoolId
+    ? await supabase.from("user_roles").select("roles!inner(slug)").eq("user_id", user.id).eq("school_id", activeSchoolContext.schoolId)
+    : { data: [] };
+  const canAccessSupport = (roleAssignments ?? []).some((assignment) => {
+    const role = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles;
+    return role && typeof role === "object" && "slug" in role && ["school_admin", "principal"].includes(String(role.slug));
+  });
   const brandingStyle = brandingProfile?.theme ? buildBrandingCssVars(brandingProfile.theme) : undefined;
   const { data: userAvatar } = user && headerProfile?.avatar_path
     ? await supabase.storage.from("profile-avatars").createSignedUrl(headerProfile.avatar_path, 60 * 60)
@@ -76,6 +83,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           userName={headerProfile?.full_name ?? user?.email ?? "Schooliva user"}
           userAvatarUrl={userAvatar?.signedUrl ?? null}
           schoolName={activeSchoolContext?.schoolName ?? null}
+          canAccessSupport={canAccessSupport}
         >
           {children}
         </AppChrome>

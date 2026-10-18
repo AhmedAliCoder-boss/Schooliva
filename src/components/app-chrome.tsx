@@ -38,12 +38,14 @@ export function AppChrome({
   userName,
   userAvatarUrl,
   schoolName,
+  canAccessSupport,
 }: {
   children: React.ReactNode;
   schoolLogoUrl: string | null;
   userName: string;
   userAvatarUrl: string | null;
   schoolName: string | null;
+  canAccessSupport: boolean;
 }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
@@ -70,6 +72,12 @@ export function AppChrome({
     { label: "Payments", href: "/finance/payments" },
     { label: "Expenses", href: "/finance/expenses" },
   ];
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.href !== "/support" || canAccessSupport),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div className={`app-chrome ${compact ? "is-compact" : ""}`}>
@@ -79,7 +87,7 @@ export function AppChrome({
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
             {schoolLogoUrl
               ? <Image src={schoolLogoUrl} alt="School logo" width={170} height={36} unoptimized className="schooliva-brand__logo" />
-              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority />}
+              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority unoptimized />}
           </Link>
           <button
             type="button"
@@ -93,7 +101,7 @@ export function AppChrome({
           </button>
         </div>
         <nav className="schooliva-nav" aria-label="Main navigation">
-          {navGroups.map((group) => (
+          {visibleNavGroups.map((group) => (
             <div key={group.title} className="schooliva-nav__group">
               <p className="schooliva-nav__label">{group.title}</p>
               {group.items.map((item) => {
@@ -119,7 +127,7 @@ export function AppChrome({
             <Link href="/dashboard" className="workspace-header__brand" aria-label="Go to school dashboard">
               {schoolLogoUrl
                 ? <Image src={schoolLogoUrl} alt="" width={130} height={32} unoptimized />
-                : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={130} height={32} />}
+                : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={130} height={32} unoptimized />}
             </Link>
             <span className="workspace-header__divider" aria-hidden="true" />
             <div className="workspace-header__page">

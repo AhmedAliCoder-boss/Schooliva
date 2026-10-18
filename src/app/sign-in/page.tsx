@@ -9,7 +9,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
   const params = await searchParams;
   return <main className="auth-page">
     <section className="auth-panel" aria-labelledby="sign-in-title">
-      <Link className="wordmark" href="/" aria-label="Schooliva home"><Image className="wordmark-logo" src="/brand/landscape_logo.png" alt="Schooliva" width={180} height={54} priority /></Link>
+      <Link className="wordmark" href="/" aria-label="Schooliva home"><Image className="wordmark-logo" src="/brand/landscape_logo.png" alt="Schooliva" width={180} height={54} priority unoptimized /></Link>
       <div className="auth-panel__content">
         <p className="eyebrow">Welcome back</p>
         <h1 id="sign-in-title">Sign in to Schooliva.</h1>

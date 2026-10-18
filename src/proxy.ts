@@ -21,6 +21,8 @@ export const config = {
     "/attendance/:path*",
     "/timetable/:path*",
     "/curriculum/:path*",
+    "/academic-planning/:path*",
+    "/academic-structure/:path*",
     "/exams/:path*",
     "/results/:path*",
     "/certificates/:path*",

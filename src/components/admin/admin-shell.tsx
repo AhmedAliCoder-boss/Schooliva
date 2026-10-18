@@ -16,6 +16,7 @@ const groups = [
   { title: "FINANCE", items: [{ label: "Billing", href: "/admin/billing", icon: "finance" }, { label: "Payments", href: "/admin/payments", icon: "payments" }, { label: "Outstanding / Dues", href: "/admin/billing/outstanding", icon: "alert" }] },
   { title: "USAGE", items: [{ label: "Storage", href: "/admin/storage", icon: "storage" }, { label: "Usage analytics", href: "/admin/usage", icon: "reports" }] },
   { title: "MANAGEMENT", items: [{ label: "Activity / Audit", href: "/admin/activity", icon: "audit" }, { label: "Notifications", href: "/admin/notifications", icon: "notifications" }, { label: "Reports", href: "/admin/reports", icon: "reports" }] },
+  { title: "SUPPORT", items: [{ label: "Support inbox", href: "/admin/support", icon: "help" }] },
   { title: "SYSTEM", items: [{ label: "Admin settings", href: "/admin/settings", icon: "settings" }] },
   { title: "ACCOUNT", items: [{ label: "My profile", href: "/profile", icon: "profile" }] },
 ];
@@ -35,7 +36,7 @@ export function AdminShell({ children, title, description, breadcrumbs = [], sch
     <button className={`admin-overlay ${open ? "is-visible" : ""}`} aria-label="Close admin navigation" onClick={() => setOpen(false)} />
     <aside className={`admin-sidebar ${compact ? "is-compact" : ""} ${open ? "is-open" : ""}`}>
       <div className="admin-sidebar__top">
-        <Link href="/admin" className="admin-brand" onClick={() => setOpen(false)} aria-label="Schooliva Admin home"><Image src="/brand/landscape_logo.png" alt="Schooliva" width={160} height={34} className="admin-brand__logo" priority /></Link>
+        <Link href="/admin" className="admin-brand" onClick={() => setOpen(false)} aria-label="Schooliva Admin home"><Image src="/brand/landscape_logo.png" alt="Schooliva" width={180} height={60} className="admin-brand__logo" priority unoptimized /></Link>
         <button type="button" className="admin-sidebar__collapse" aria-label={compact ? "Expand admin sidebar" : "Collapse admin sidebar"} aria-expanded={!compact} title={compact ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCompact((value) => !value)}>{compact ? "→" : "←"}</button>
         <button type="button" className="admin-sidebar__close" aria-label="Close admin navigation" onClick={() => setOpen(false)}>×</button>
       </div>
@@ -53,6 +54,7 @@ export function AdminShell({ children, title, description, breadcrumbs = [], sch
 export function AdminUnavailable({ title, detail }: { title: string; detail: string }) { return <section className="admin-unavailable"><span className="admin-unavailable__mark">—</span><div><h2>{title}</h2><p>{detail}</p></div><span className="admin-badge admin-badge--neutral">Not configured</span></section>; }
 
 const workflowMessages: Record<string, string> = {
+  "invalid-branding": "Branding details could not be validated. Check the school selection and theme values, then retry.",
   "contract-created": "Contract created successfully.",
   "contract-invoice-scheduled": "The invoice is scheduled. School access activates or renews only after the full invoice is paid.",
   "payment-recorded": "Payment recorded. A fully paid contract invoice activates or renews school access. Schedule the next invoice from Contracts when required.",

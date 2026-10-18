@@ -28,6 +28,7 @@ export const navGroups = [
       { label: "Attendance", href: "/attendance", icon: "attendance" },
       { label: "Timetable", href: "/timetable", icon: "timetable" },
       { label: "Subjects & Classes", href: "/curriculum", icon: "students" },
+      { label: "Academic planning", href: "/academic-planning", icon: "reports" },
       { label: "Exams", href: "/exams", icon: "exams" },
       { label: "Results", href: "/results", icon: "results" },
       { label: "Assignments", href: "/assignments", icon: "documents" },
@@ -89,6 +90,10 @@ export const navGroups = [
   {
     title: "Account",
     items: [{ label: "My profile", href: "/profile", icon: "profile" }],
+  },
+  {
+    title: "Support",
+    items: [{ label: "Support center", href: "/support", icon: "help" }],
   },
 ];
 
@@ -154,6 +159,8 @@ export function NavIcon({ name }: { name: string }) {
       return <svg viewBox="0 0 24 24" aria-hidden="true"><path {...common} d="M7 4.5h10l3 3V18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Zm8 0v3h3m-9 9h8M8 15h8" /></svg>;
     case "profile":
       return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="8" r="3.5" /><path {...common} d="M5 20c.5-3.4 3.2-5.5 7-5.5s6.5 2.1 7 5.5" /></svg>;
+    case "help":
+      return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="12" r="9" /><path {...common} d="M9.5 9a2.6 2.6 0 1 1 4.4 1.9c-1.1 1-1.9 1.5-1.9 3.1M12 17.5v.1" /></svg>;
     default:
       return <svg viewBox="0 0 24 24" aria-hidden="true"><circle {...common} cx="12" cy="12" r="8" /></svg>;
   }
@@ -236,7 +243,7 @@ export function SchoolivaShell({
           <Link href="/dashboard" className="schooliva-brand" aria-label="Schooliva home">
             {schoolLogoUrl
                 ? <Image src={schoolLogoUrl} alt={schoolContext ?? "School logo"} width={170} height={36} unoptimized className="schooliva-brand__logo" />
-              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority />}
+              : <Image src="/brand/landscape_logo.png" alt="Schooliva" width={170} height={36} className="schooliva-brand__logo" priority unoptimized />}
           </Link>
           <button
             type="button"

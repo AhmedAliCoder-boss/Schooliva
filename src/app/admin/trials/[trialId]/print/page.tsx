@@ -40,7 +40,7 @@ export default async function PlatformTrialPrintPage({ params }: { params: Param
     </div>
     <article className="platform-contract-document platform-trial-document">
       <header className="platform-contract-document__header">
-        <div><Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority /><span>School management, clearly managed.</span></div>
+        <div><Image src="/brand/landscape_logo.png" alt="Schooliva" width={190} height={56} priority unoptimized /><span>School management, clearly managed.</span></div>
         <div><span>SCHOOLIVA PLATFORM</span><h1>TRIAL ACTIVATION SUMMARY</h1><strong>{trial.trial_name}</strong></div>
       </header>
       <section className="platform-contract-document__parties">

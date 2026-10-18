@@ -25,7 +25,6 @@ function isPrivatePage(pathname) {
 
 function isPublicStaticAsset(pathname) {
   return pathname.startsWith("/_next/static/")
-    || pathname.startsWith("/icons/")
     || pathname.startsWith("/brand/")
     || pathname === "/manifest.webmanifest";
 }
